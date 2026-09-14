@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Register - AI Secure Messaging{% endblock %}
+{% block content %}
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-shield-halved"></i>
+            <h2>Register</h2>
+            <p>Create a secure user account</p>
+        </div>
+        <form method="POST" action="{{ url_for('auth.register') }}">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" name="full_name" placeholder="Enter your name" required>
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" placeholder="Choose a username (e.g. azlan123)" required>
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" placeholder="Enter your email address" required>
+            </div>
+            <div class="form-group">
+                <label>Security Question</label>
+                <select name="question" required>
+                    <option value="">Choose favourite question</option>
+                    {% for q in questions %}
+                    <option value="{{ q }}">{{ q }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Security Answer</label>
+                <input type="text" name="answer" placeholder="Enter answer" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="8-12 chars (e.g. Secret@123)" minlength="8" maxlength="12" required>
+                <small style="color:#64748b;font-size:11px;display:block;margin-top:2px;"><i class="fas fa-info-circle"></i> 8-12 chars: 1 Uppercase, 1 Lowercase, 1 Number & 1 Symbol</small>
+            </div>
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" name="confirm_password" placeholder="Confirm your password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">
+                Register
+            </button>
+        </form>
+        <div class="auth-links">
+            <a href="{{ url_for('auth.login') }}">Back to Login</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

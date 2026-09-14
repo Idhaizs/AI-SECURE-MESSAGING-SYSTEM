@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Welcome - AI Secure Messaging{% endblock %}
+{% block content %}
+<div class="auth-wrapper">
+    <div class="role-card">
+        <div class="logo">
+            <div class="logo-shield">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <h1>AI Secure Messaging</h1>
+            <p>Select your role to continue</p>
+        </div>
+        
+        <div class="role-buttons">
+            <a href="{{ url_for('auth.login') }}" class="role-btn role-user">
+                <div class="role-icon">
+                    <i class="fa-regular fa-user"></i>
+                </div>
+                <div class="role-text">
+                    <span class="role-title">User</span>
+                    <small class="role-subtitle">Access messaging platform</small>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('auth.admin_login') }}" class="role-btn role-admin">
+                <div class="role-icon">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <div class="role-text">
+                    <span class="role-title">Admin</span>
+                    <small class="role-subtitle">Access admin dashboard</small>
+                </div>
+            </a>
+        </div>
+
+        <div class="role-footer-note">
+            <i class="fas fa-lock"></i> All communications are end-to-end encrypted
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+cloudflared.exe
+project.tar.gz
+*.log
+.DS_Store
+Thumbs.db

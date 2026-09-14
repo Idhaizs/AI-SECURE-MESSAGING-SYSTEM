@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Reports - Admin{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+{% block content %}
+<div class="admin-app-container">
+    <div class="admin-top-brandbar">
+        <div class="brand-title">
+            <i class="fas fa-shield-halved"></i>
+            <span>AI Secure Messaging System</span>
+        </div>
+        <div class="admin-portal-tag">Admin Portal</div>
+    </div>
+    <div class="admin-wrapper">
+        {% include 'admin/_sidebar.html' %}
+    <div class="admin-content">
+        <div class="admin-topbar">
+            <h2>Security Reports</h2>
+            <div class="admin-user"><i class="fas fa-user-shield"></i><span>{{ session.username }}</span></div>
+        </div>
+        <div class="page-content">
+            <div class="dashboard-grid">
+                <!-- Daily Stats Chart -->
+                <div class="dashboard-card">
+                    <div class="card-header"><h3><i class="fas fa-chart-line"></i> Message Activity (Last 7 Days)</h3></div>
+                    <div class="card-body">
+                        <canvas id="dailyChart" height="200"></canvas>
+                    </div>
+                </div>
+                <!-- Threat Types Chart -->
+                <div class="dashboard-card">
+                    <div class="card-header"><h3><i class="fas fa-chart-pie"></i> Threat Type Breakdown</h3></div>
+                    <div class="card-body">
+                        <canvas id="threatChart" height="200"></canvas>
+                    </div>
+                </div>
+                <!-- File Scan Stats -->
+                <div class="dashboard-card">
+                    <div class="card-header"><h3><i class="fas fa-file-shield"></i> File Scan Results</h3></div>
+                    <div class="card-body">
+                        <canvas id="fileChart" height="200"></canvas>
+                    </div>
+                </div>
+                <!-- Threat Stats Table -->
+                <div class="dashboard-card">
+                    <div class="card-header"><h3><i class="fas fa-table"></i> Threat Statistics</h3></div>
+                    <div class="card-body">
+                        <table class="data-table">
+                            <thead><tr><th>Threat Type</th><th>Count</th></tr></thead>
+                            <tbody>
+                            {% for stat in threat_stats %}
+                            <tr>
+                                <td><span class="threat-badge {{ stat.threat_type }}">{{ stat.threat_type.replace('_',' ').title() }}</span></td>
+                                <td><strong>{{ stat.count }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                            {% if not threat_stats %}
+                            <tr><td colspan="2" style="text-align:center;color:#94a3b8">No threat data</td></tr>
+                            {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+const dailyData = {{ daily_stats | tojson }};
+const threatData = {{ threat_stats | tojson }};
+const fileData = {{ file_stats | tojson }};
+
+// Daily Chart
+new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+        labels: dailyData.map(d => d.date),
+        datasets: [
+            { label: 'Total Messages', data: dailyData.map(d => d.total), backgroundColor: '#3b82f6' },
+            { label: 'Suspicious', data: dailyData.map(d => d.suspicious), backgroundColor: '#ef4444' }
+        ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'top' } } }
+});
+
+// Threat Chart
+if (threatData.length > 0) {
+    new Chart(document.getElementById('threatChart'), {
+        type: 'doughnut',
+        data: {
+            labels: threatData.map(t => t.threat_type.replace(/_/g,' ')),
+            datasets: [{ data: threatData.map(t => t.count), backgroundColor: ['#ef4444','#f97316','#eab308','#3b82f6','#8b5cf6'] }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+}
+
+// File Chart
+if (fileData.length > 0) {
+    new Chart(document.getElementById('fileChart'), {
+        type: 'pie',
+        data: {
+            labels: fileData.map(f => f.scan_result),
+            datasets: [{ data: fileData.map(f => f.count), backgroundColor: ['#10b981','#ef4444','#f59e0b','#6b7280'] }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+}
+</script>
+</div>
+{% endblock %}

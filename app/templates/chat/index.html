@@ -1,0 +1,690 @@
+{% extends 'base.html' %}
+{% block title %}Messages - AI Secure Messaging{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}">
+<style>
+.app-topbar {
+    height: 38px;
+    background: #1A2B4C;
+    color: #F8FAFC;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 13px;
+    font-weight: 600;
+    user-select: none;
+    flex-shrink: 0;
+}
+.app-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+}
+.app-topbar-brand i {
+    color: #38BDF8;
+    font-size: 14px;
+}
+.chat-app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+.chat-app-container .chat-wrapper {
+    height: calc(100vh - 38px) !important;
+    flex: 1;
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="chat-app-container">
+    <div class="app-topbar">
+        <div class="app-topbar-brand">
+            <i class="fas fa-shield-halved"></i>
+            <span>AI Secure Messaging System</span>
+        </div>
+    </div>
+    <div class="chat-wrapper">
+
+    <!-- Left Sidebar Icons -->
+    <div class="sidebar-icons">
+        <div class="sidebar-nav">
+            <button class="sidebar-icon active" id="navChatsBtn" title="Chats" onclick="switchNav('all', this)" style="position:relative;">
+                <i class="fas fa-comment-dots"></i>
+                <span id="navChatsBadge" style="display:none; position:absolute; top:4px; right:4px; background:#ef4444; color:white; font-size:10px; font-weight:800; border-radius:10px; min-width:16px; height:16px; align-items:center; justify-content:center; padding:0 3px;">0</span>
+            </button>
+            <button class="sidebar-icon" id="navGroupsBtn" title="Groups" onclick="switchNav('group', this)">
+                <i class="fas fa-users"></i>
+            </button>
+            <button class="sidebar-icon" id="navStarredBtn" title="Starred" onclick="switchNav('favourite', this)">
+                <i class="fas fa-star"></i>
+            </button>
+            <button class="sidebar-icon" id="navCalendarBtn" title="Calendar & Meetings" onclick="switchNav('calendar', this)" style="position:relative;">
+                <i class="fas fa-calendar-alt"></i>
+                <span id="navCalendarBadge" style="display:none; position:absolute; top:4px; right:4px; background:#ef4444; color:white; font-size:10px; font-weight:800; border-radius:10px; min-width:16px; height:16px; align-items:center; justify-content:center; padding:0 3px;">0</span>
+            </button>
+            <button class="sidebar-icon" id="navSettingsBtn" title="Settings" onclick="openUserSettingsModal()">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+        <a href="{{ url_for('auth.logout') }}" class="sidebar-icon sidebar-logout" title="Logout">
+            <i class="fas fa-sign-out-alt"></i>
+        </a>
+    </div>
+
+    <!-- Contact List Panel -->
+    <div class="contacts-panel" id="panel-contacts">
+        <div class="contacts-header">
+            <div class="contacts-title-row">
+                <h3>Chats</h3>
+                <button class="icon-btn-sm" title="New Group" onclick="openGroupModal()">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchUser" placeholder="Search or start a new chat" oninput="filterUsers()">
+            </div>
+
+            <!-- Filter Pills -->
+            <div class="filter-pills">
+                <button class="filter-pill active" onclick="setFilter('all', this)">All</button>
+                <button class="filter-pill" onclick="setFilter('favourite', this)">Favourite</button>
+                <button class="filter-pill" onclick="setFilter('group', this)">Group</button>
+            </div>
+        </div>
+
+        <div class="contacts-list" id="contactsList">
+            {% for group in groups %}
+            <div class="contact-item group-item" data-user-id="g-{{ group.group_id }}" data-username="{{ group.group_name }}" data-is-group="true" onclick="openChat({{ group.group_id }}, '{{ group.group_name }}', true)">
+                <div class="contact-avatar group-avatar" style="background:#1A2B4C;color:#fff;">
+                    <i class="fas fa-users" style="font-size:14px;"></i>
+                </div>
+                <div class="contact-info">
+                    <span class="contact-name">{{ group.group_name }}</span>
+                    <span class="contact-preview" id="preview-g-{{ group.group_id }}">Group Chat</span>
+                </div>
+                <div class="contact-meta">
+                    <span class="contact-time" id="time-g-{{ group.group_id }}"></span>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% for user in users %}
+            <div class="contact-item" data-user-id="{{ user.user_id }}" data-username="{{ user.username }}" data-is-group="false" onclick="openChat({{ user.user_id }}, '{{ user.username }}')">
+                <div class="contact-avatar">{{ user.username[0].upper() }}</div>
+                <div class="contact-info">
+                    <span class="contact-name">{{ user.username }}</span>
+                    <span class="contact-preview" id="preview-{{ user.user_id }}">Click to start messaging</span>
+                </div>
+                <div class="contact-meta" style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                    <span class="contact-time" id="time-{{ user.user_id }}"></span>
+                    <span class="unread-pill-badge" id="unread-badge-{{ user.user_id }}" style="display:none; background:#22c55e; color:white; font-size:11px; font-weight:800; border-radius:12px; padding:2px 7px; min-width:18px; text-align:center; box-shadow:0 1px 2px rgba(0,0,0,0.15);">0</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Main Chat Area -->
+    <div class="chat-main" id="chatMain">
+        <!-- Empty State -->
+        <div class="chat-empty" id="chatEmpty">
+            <div class="empty-quick-actions">
+                <div class="quick-action-item" onclick="document.getElementById('fileInput').click()">
+                    <div class="quick-action-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <span>Send Document</span>
+                </div>
+                <div class="quick-action-item" onclick="openGroupModal()">
+                    <div class="quick-action-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <span>Create Group</span>
+                </div>
+            </div>
+            <h3>AI Secure Messaging</h3>
+            <p>Select a contact to begin end-to-end encrypted chat</p>
+        </div>
+
+        <!-- Active Chat -->
+        <div class="chat-active" id="chatActive" style="display:none;">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="chat-user-info">
+                    <button class="mobile-back-btn" onclick="closeMobileChat()" title="Back to Chats">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="chat-avatar" id="chatAvatar"></div>
+                    <div>
+                        <h4 id="chatUsername"></h4>
+                        <span class="typing-indicator" id="typingIndicator" style="display:none;">
+                            <i class="fas fa-ellipsis-h"></i> typing...
+                        </span>
+                    </div>
+                </div>
+                <div class="chat-actions" style="position:relative;">
+                    <button class="icon-btn" title="Search in chat" onclick="toggleInChatSearch()">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="icon-btn" title="More options" onclick="toggleMoreOptionsMenu()">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+
+                    <!-- More Options Dropdown Menu -->
+                    <div class="more-options-dropdown" id="moreOptionsMenu" style="display:none;">
+                        <div class="dropdown-item" id="favMenuItem" onclick="toggleFavoriteChat()"><i class="fas fa-star"></i> Favourite Chat</div>
+                        <div class="dropdown-item" id="infoMenuItem" onclick="showContactInfo()"><i class="fas fa-info-circle"></i> Contact Info</div>
+                        <div class="dropdown-item" onclick="clearChatHistory()"><i class="fas fa-broom"></i> Clear History</div>
+                        <div class="dropdown-item text-danger" onclick="deleteCurrentConversation()"><i class="fas fa-trash-alt"></i> Delete Chat</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- In-Chat Search Bar -->
+            <div class="in-chat-search-bar" id="inChatSearchBar" style="display:none;">
+                <i class="fas fa-search"></i>
+                <input type="text" id="inChatSearchInput" placeholder="Search messages in this conversation..." oninput="filterInChatMessages()">
+                <button onclick="toggleInChatSearch()" class="close-search-btn"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="messages-area" id="messagesArea">
+                <div class="loading-messages" id="loadingMessages">
+                    <i class="fas fa-spinner fa-spin"></i> Loading messages...
+                </div>
+            </div>
+
+            <!-- Emoji Picker Popup -->
+            <div class="emoji-picker-popup" id="emojiPicker" style="display:none;">
+                <span onclick="addEmoji('😊')">😊</span>
+                <span onclick="addEmoji('👍')">👍</span>
+                <span onclick="addEmoji('❤️')">❤️</span>
+                <span onclick="addEmoji('🔥')">🔥</span>
+                <span onclick="addEmoji('😂')">😂</span>
+                <span onclick="addEmoji('🙏')">🙏</span>
+                <span onclick="addEmoji('🎉')">🎉</span>
+                <span onclick="addEmoji('✅')">✅</span>
+                <span onclick="addEmoji('🔒')">🔒</span>
+                <span onclick="addEmoji('🛡️')">🛡️</span>
+            </div>
+
+            <!-- Chat Input Bar -->
+            <div class="chat-input-area">
+                <!-- Reply Preview Banner -->
+                <div class="reply-preview-banner" id="replyPreviewBanner" style="display:none;">
+                    <div class="reply-content">
+                        <i class="fas fa-reply" style="color:#1A2B4C;"></i>
+                        <div>
+                            <strong id="replySenderName" style="color:#1A2B4C;font-size:12px;display:block;">Sender</strong>
+                            <span id="replyText" style="font-size:12px;color:#64748B;">Quoted message</span>
+                        </div>
+                    </div>
+                    <button onclick="cancelReply()" class="close-reply-btn"><i class="fas fa-times"></i></button>
+                </div>
+
+                <!-- Threat Warning Banner -->
+                <div class="threat-warning" id="threatWarning" style="display:none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="threatWarningText"></span>
+                    <button onclick="dismissWarning()"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="input-row">
+                    <!-- Attachment + Button -->
+                    <label class="attach-btn" title="Attach File (PDF, PNG, MP4, etc.)">
+                        <i class="fas fa-plus"></i>
+                        <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)">
+                    </label>
+
+                    <!-- Emoji Button -->
+                    <button class="icon-btn-input" title="Insert Emoji" onclick="toggleEmojiPicker()">
+                        <i class="far fa-smile"></i>
+                    </button>
+
+                    <!-- Message Textarea -->
+                    <textarea id="messageInput" placeholder="Type a message..." rows="1"
+                        oninput="autoResize(this); handleTyping()"
+                        onkeydown="handleEnter(event)"></textarea>
+
+                    <!-- Send Button -->
+                    <button class="send-btn" onclick="sendMessage()" id="sendBtn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Panel -->
+    <div class="main-panel" id="panel-calendar" style="display:none; flex-direction:column; flex:1; background:#f8fafc; height:100vh; overflow-y:auto; padding:28px; box-sizing:border-box;">
+        <!-- Calendar Header -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; background:white; padding:18px 24px; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div>
+                <h2 style="margin:0; font-size:22px; font-weight:700; color:#1a2b4c;">Calendar & Meetings</h2>
+                <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Schedule and manage your online meetings & team events</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px;">
+                <!-- Display Mode Toggle (Grid vs List) -->
+                <div style="display:flex; background:#f1f5f9; border-radius:20px; padding:3px; border:1px solid #e2e8f0;">
+                    <button class="cal-mode-btn active" id="calModeGridBtn" onclick="switchCalendarDisplayMode('grid')" style="border:none; background:#1a2b4c; color:white; padding:7px 18px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-th"></i> Grid View
+                    </button>
+                    <button class="cal-mode-btn" id="calModeListBtn" onclick="switchCalendarDisplayMode('list')" style="border:none; background:transparent; color:#64748b; padding:7px 18px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-list-ul"></i> List View
+                    </button>
+                </div>
+
+                <button onclick="openCreateMeetingModal()" style="background:#1a2b4c; color:white; border:none; padding:10px 20px; border-radius:10px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition:transform 0.15s;">
+                    <i class="fas fa-plus"></i> Schedule Meeting
+                </button>
+            </div>
+        </div>
+
+        <!-- Visual Grid Calendar View Container -->
+        <div id="calendarVisualGridContainer" class="cal-grid-container">
+            <!-- Calendar Navigation Bar -->
+            <div class="cal-month-nav">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <button onclick="prevMonth()" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px;"><i class="fas fa-chevron-left"></i> Prev</button>
+                    <h3 id="currentMonthYearLabel" style="margin:0; font-size:18px; font-weight:800; color:#1a2b4c; min-width:160px; text-align:center;">August 2026</h3>
+                    <button onclick="nextMonth()" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px;">Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+                <button onclick="goToToday()" style="background:#eff6ff; border:1px solid #bfdbfe; color:#2563eb; padding:6px 16px; border-radius:8px; cursor:pointer; font-weight:700; font-size:12px;">
+                    <i class="fas fa-calendar-day"></i> Today
+                </button>
+            </div>
+
+            <!-- Days Header -->
+            <div class="cal-grid-days-header">
+                <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+            </div>
+
+            <!-- Days Matrix -->
+            <div id="calendarGridMatrix" class="cal-grid-matrix">
+                <!-- JS populated -->
+            </div>
+        </div>
+
+        <!-- List View Container (Hidden by default in grid view) -->
+        <div id="calendarListViewContainer" style="display:none; flex-direction:column; gap:14px;">
+            <!-- Filter Pills for List View -->
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="display:flex; background:#f1f5f9; border-radius:20px; padding:3px; border:1px solid #e2e8f0;">
+                    <button class="cal-view-btn active" id="calViewDay" onclick="filterCalendarView('day')" style="border:none; background:#1a2b4c; color:white; padding:6px 16px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s;">Day</button>
+                    <button class="cal-view-btn" id="calViewWeek" onclick="filterCalendarView('week')" style="border:none; background:transparent; color:#64748b; padding:6px 16px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s;">Week</button>
+                    <button class="cal-view-btn" id="calViewMonth" onclick="filterCalendarView('month')" style="border:none; background:transparent; color:#64748b; padding:6px 16px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s;">Month</button>
+                </div>
+            </div>
+
+            <div id="calendarMeetingsList" style="display:flex; flex-direction:column; gap:14px;">
+                <div style="text-align:center; color:#94a3b8; padding:40px;"><i class="fas fa-spinner fa-spin"></i> Loading meetings...</div>
+            </div>
+        </div>
+    </div>
+
+<!-- Modal: Create Group (Registered Users Only) -->
+<div class="modal-overlay" id="groupModal" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3><i class="fas fa-users"></i> Create New Group</h3>
+            <button onclick="closeGroupModal()" class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Group Name</label>
+                <input type="text" id="groupNameInput" placeholder="Enter group name..." required>
+            </div>
+            <div class="form-group">
+                <label>Select Members (Registered Users Only)</label>
+                <div class="member-select-list" id="memberSelectList">
+                    {% for user in users %}
+                    <label class="member-checkbox-item">
+                        <div class="member-checkbox-left">
+                            <input type="checkbox" value="{{ user.user_id }}" class="group-member-checkbox">
+                            <div class="member-avatar-sm">{{ user.username[0].upper() }}</div>
+                            <span class="member-name">{{ user.username }}</span>
+                        </div>
+                        <small class="registered-badge">Registered</small>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeGroupModal()" class="btn btn-sm">Cancel</button>
+            <button onclick="submitCreateGroup()" class="btn btn-primary btn-sm">Create Group</button>
+        </div>
+    </div>
+</div>
+
+<!-- Group Info & Settings Modal -->
+<div class="modal" id="groupInfoModal" style="display:none;">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-users-cog"></i> Group Settings & Members</h3>
+            <button onclick="closeGroupInfoModal()" class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" id="groupInfoModalBody">
+            <div style="text-align:center;padding:20px;color:#94a3b8">
+                <i class="fas fa-spinner fa-spin"></i> Loading group details...
+            </div>
+        </div>
+        <div class="modal-footer" id="groupInfoModalFooter">
+            <button onclick="closeGroupInfoModal()" class="btn btn-sm">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- User Settings Modal -->
+<div class="modal" id="userSettingsModal" style="display:none;">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-cog"></i> Account & Profile Settings</h3>
+            <button onclick="closeUserSettingsModal()" class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="max-height:480px;overflow-y:auto;padding:20px;">
+            <!-- User Profile Summary & Edit Username Section -->
+            <div style="margin-bottom:24px;">
+                <h4 style="font-size:14px;color:#1e293b;margin-bottom:12px;"><i class="fas fa-user-edit"></i> Profile & Username</h4>
+                <form onsubmit="submitUpdateUsername(event)">
+                    <div style="display:flex;align-items:center;gap:16px;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:14px;">
+                        <div style="width:50px;height:50px;border-radius:50%;background:#1A2B4C;color:white;font-weight:700;font-size:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            {{ session.username[0].upper() }}
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px;color:#475569;display:block;margin-bottom:4px;">Display Username</label>
+                            <input type="text" id="editUsernameInput" value="{{ session.username }}" placeholder="Enter username..." required style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;outline:none;">
+                        </div>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button type="submit" class="btn btn-primary btn-sm" id="updateUsernameBtn"><i class="fas fa-save"></i> Save Username</button>
+                    </div>
+                </form>
+            </div>
+
+            <hr style="border:0;border-top:1px solid #e2e8f0;margin:20px 0;">
+
+            <!-- Change Password Section -->
+            <div style="margin-bottom:20px;">
+                <h4 style="font-size:14px;color:#1e293b;margin-bottom:12px;"><i class="fas fa-key"></i> Change Password</h4>
+                <form onsubmit="submitChangePassword(event)">
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#475569;">Current Password</label>
+                        <input type="password" id="oldPasswordInput" placeholder="Enter current password..." required>
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#475569;">New Password</label>
+                        <input type="password" id="newPasswordInput" placeholder="Enter new password (min. 6 characters)..." required>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button type="submit" class="btn btn-primary btn-sm" id="changePasswordBtn"><i class="fas fa-lock"></i> Update Password</button>
+                    </div>
+                </form>
+            </div>
+
+            <hr style="border:0;border-top:1px solid #e2e8f0;margin:20px 0;">
+
+            <!-- Security Question Recovery Section -->
+            <div style="margin-bottom:10px;">
+                <h4 style="font-size:14px;color:#1e293b;margin-bottom:12px;"><i class="fas fa-user-shield"></i> Secret Recovery Question</h4>
+                <form onsubmit="submitUpdateSecurityQuestion(event)">
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#475569;">Select Secret Question</label>
+                        <select id="secQuestionSelect" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">
+                            <option value="What was the name of your first pet?">What was the name of your first pet?</option>
+                            <option value="What city were you born in?">What city were you born in?</option>
+                            <option value="What is your childhood nickname?">What is your childhood nickname?</option>
+                            <option value="What is your favourite movie?">What is your favourite movie?</option>
+                            <option value="What is your secret code?">What is your secret code?</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#475569;">Secret Answer</label>
+                        <input type="text" id="secAnswerInput" placeholder="Enter secret answer..." required>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button type="submit" class="btn btn-primary btn-sm" id="updateSecQuestionBtn"><i class="fas fa-save"></i> Save Question</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeUserSettingsModal()" class="btn btn-sm">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- File Upload & Password Protection Modal -->
+<div class="modal" id="fileUploadModal" style="display:none;">
+    <div class="modal-content" style="max-width:460px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-paperclip"></i> Send Attachment</h3>
+            <button onclick="closeFileUploadModal()" class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px;">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:16px;">
+                <i class="fas fa-file" style="font-size:24px;color:#1A2B4C;"></i>
+                <div style="overflow:hidden;">
+                    <strong id="uploadFileNamePreview" style="font-size:14px;color:#1e293b;display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;">filename.pdf</strong>
+                    <small id="uploadFileSizePreview" style="color:#64748b;font-size:11px;">0 KB</small>
+                </div>
+            </div>
+
+            <!-- Optional Password Protection Toggle -->
+            <div style="padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;font-size:13px;color:#166534;">
+                    <input type="checkbox" id="filePasswordToggle" onchange="toggleFilePasswordInput(this)" style="width:16px;height:16px;cursor:pointer;">
+                    <span>🔒 Password Protect Attachment (Optional)</span>
+                </label>
+                <div id="filePasswordContainer" style="display:none;margin-top:12px;">
+                    <input type="password" id="fileUploadPassword" placeholder="Set a password for this file..." style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;">
+                    <small style="color:#4b5563;font-size:11px;margin-top:4px;display:block;">Recipient will be required to enter this password to view/download the file.</small>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeFileUploadModal()" class="btn btn-sm">Cancel</button>
+            <button onclick="confirmUploadFile()" class="btn btn-primary btn-sm" id="uploadFileConfirmBtn"><i class="fas fa-paper-plane"></i> Send Attachment</button>
+        </div>
+    </div>
+</div>
+
+<!-- Recipient File Unlock Modal -->
+<div class="modal" id="fileUnlockModal" style="display:none;">
+    <div class="modal-content" style="max-width:440px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-lock" style="color:#eab308"></i> Password Protected File</h3>
+            <button onclick="closeFileUnlockModal()" class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding:20px;">
+            <p style="font-size:13px;color:#475569;margin-bottom:14px;">
+                The sender protected <strong id="unlockFileNameText" style="color:#1e293b;">this attachment</strong> with a password. Enter the password below to unlock and download.
+            </p>
+            <input type="hidden" id="unlockFileId">
+            <div class="form-group" style="margin-bottom:10px;">
+                <label style="font-size:12px;color:#475569;">File Password</label>
+                <input type="password" id="unlockFilePasswordInput" placeholder="Enter file password..." required style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13.5px;outline:none;">
+            </div>
+            <div id="unlockFileError" style="color:#ef4444;font-size:12px;display:none;margin-top:6px;">❌ Incorrect password. Access denied.</div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeFileUnlockModal()" class="btn btn-sm">Cancel</button>
+            <button onclick="submitUnlockFile()" class="btn btn-primary btn-sm" id="unlockFileSubmitBtn"><i class="fas fa-key"></i> Unlock & Download</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Meeting Modal -->
+<div class="modal" id="createMeetingModal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.7); z-index:9999; backdrop-filter:blur(4px);">
+    <div class="modal-content" style="max-width:520px; width:90%; border-radius:16px; padding:24px; background:white; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:18px;">
+            <h3 style="margin:0; font-size:18px; font-weight:700; color:#1a2b4c;"><i class="fas fa-calendar-plus" style="color:#2563eb; margin-right:8px;"></i> Schedule New Meeting</h3>
+            <button onclick="closeCreateMeetingModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <!-- Title -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Title *</label>
+                <input type="text" id="meetingTitleInput" placeholder="e.g., FYP Project Discussion" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <!-- Platform -->
+            <div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                    <label style="font-size:12px; font-weight:600; color:#475569;">Meeting Platform</label>
+                    <a id="openExternalPlatformBtn" href="https://meet.google.com/new" target="_blank" style="font-size:11px; color:#2563eb; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                        <i class="fas fa-external-link-alt"></i> Create Link on Google Meet
+                    </a>
+                </div>
+                <select id="meetingPlatformSelect" onchange="togglePlatformLocation(this.value)" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                    <option value="google_meet">📹 Google Meet</option>
+                    <option value="teams">🟦 Microsoft Teams</option>
+                    <option value="physical">📍 Physical Location</option>
+                </select>
+            </div>
+
+            <!-- Custom Location / Link input -->
+            <div id="customLocationContainer" style="display:block;">
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;" id="customLocationLabel">Meeting Link / Address</label>
+                <input type="text" id="meetingLocationInput" placeholder="Paste your Google Meet link here (e.g., https://meet.google.com/abc-defg-hij)" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <!-- Dates -->
+            <div style="display:flex; gap:12px;">
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Start Time *</label>
+                    <input type="datetime-local" id="meetingStartTimeInput" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; box-sizing:border-box;">
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">End Time *</label>
+                    <input type="datetime-local" id="meetingEndTimeInput" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <!-- Participants Checkboxes -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Select Participants</label>
+                <div id="meetingParticipantsList" style="max-height:110px; overflow-y:auto; border:1px solid #cbd5e1; border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; background:#f8fafc;">
+                    {% for user in users %}
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#334155; cursor:pointer;">
+                        <input type="checkbox" value="{{ user.user_id }}" class="meeting-participant-checkbox" style="width:14px; height:14px;">
+                        <span>{{ user.username }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Agenda / Details -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Agenda / Details</label>
+                <textarea id="meetingDescriptionInput" rows="2" placeholder="Enter key topics or discussion agenda..." style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; resize:none; box-sizing:border-box;"></textarea>
+            </div>
+
+            <!-- Send Chat Invite Checkbox -->
+            <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="sendChatInviteCheckbox" checked style="width:16px; height:16px; cursor:pointer;">
+                <label for="sendChatInviteCheckbox" style="font-size:13px; color:#334155; cursor:pointer; font-weight:500;">Post Meeting Invite Card to Active Chat</label>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <button onclick="closeCreateMeetingModal()" style="padding:9px 16px; border:1px solid #cbd5e1; background:white; color:#475569; border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+            <button id="submitMeetingBtn" onclick="submitCreateMeeting()" style="padding:9px 20px; border:none; background:#1a2b4c; color:white; border-radius:8px; font-weight:600; cursor:pointer;">
+                <i class="fas fa-calendar-check"></i> Create Meeting
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- View Meeting Details Modal -->
+<div class="modal" id="viewMeetingDetailsModal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.7); z-index:9999; backdrop-filter:blur(4px);">
+    <div class="modal-content" style="max-width:540px; width:90%; border-radius:16px; padding:24px; background:white; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:18px;">
+            <h3 style="margin:0; font-size:18px; font-weight:700; color:#1a2b4c;"><i class="fas fa-info-circle" style="color:#2563eb; margin-right:8px;"></i> Meeting Details</h3>
+            <button onclick="closeMeetingDetailsModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="viewMeetingDetailsBody" style="display:flex; flex-direction:column; gap:14px;">
+            <!-- JS populated -->
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:20px; border-top:1px solid #e2e8f0; padding-top:14px;">
+            <button onclick="closeMeetingDetailsModal()" style="padding:9px 20px; border:none; background:#1a2b4c; color:white; border-radius:8px; font-weight:600; cursor:pointer;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Meeting Modal -->
+<div class="modal" id="editMeetingModal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.7); z-index:9999; backdrop-filter:blur(4px);">
+    <div class="modal-content" style="max-width:520px; width:90%; border-radius:16px; padding:24px; background:white; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:18px;">
+            <h3 style="margin:0; font-size:18px; font-weight:700; color:#1a2b4c;"><i class="fas fa-edit" style="color:#f59e0b; margin-right:8px;"></i> Edit Meeting</h3>
+            <button onclick="closeEditMeetingModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+        </div>
+
+        <input type="hidden" id="editMeetingIdInput">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <!-- Title -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Title *</label>
+                <input type="text" id="editMeetingTitleInput" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <!-- Platform -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Platform</label>
+                <select id="editMeetingPlatformSelect" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                    <option value="google_meet">📹 Google Meet</option>
+                    <option value="teams">🟦 Microsoft Teams</option>
+                    <option value="physical">📍 Physical Location</option>
+                </select>
+            </div>
+
+            <!-- Location / Link input -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Link / Address</label>
+                <input type="text" id="editMeetingLocationInput" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <!-- Dates -->
+            <div style="display:flex; gap:12px;">
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Start Time *</label>
+                    <input type="datetime-local" id="editMeetingStartTimeInput" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; box-sizing:border-box;">
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">End Time *</label>
+                    <input type="datetime-local" id="editMeetingEndTimeInput" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <!-- Agenda / Details -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Meeting Agenda / Details</label>
+                <textarea id="editMeetingDescriptionInput" rows="2" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; resize:none; box-sizing:border-box;"></textarea>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <button onclick="closeEditMeetingModal()" style="padding:9px 16px; border:1px solid #cbd5e1; background:white; color:#475569; border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+            <button id="submitEditMeetingBtn" onclick="submitUpdateMeeting()" style="padding:9px 20px; border:none; background:#1a2b4c; color:white; border-radius:8px; font-weight:600; cursor:pointer;">
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+        </div>
+    </div>
+</div>
+
+<input type="hidden" id="currentUserId" value="{{ session.user_id }}">
+<input type="hidden" id="currentUsername" value="{{ session.username }}">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

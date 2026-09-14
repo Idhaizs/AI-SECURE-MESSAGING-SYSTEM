@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard - AI Secure Messaging{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<div class="admin-app-container">
+    <div class="admin-top-brandbar">
+        <div class="brand-title">
+            <i class="fas fa-shield-halved"></i>
+            <span>AI Secure Messaging System</span>
+        </div>
+        <div class="admin-portal-tag">Admin Portal</div>
+    </div>
+    <div class="admin-wrapper">
+        {% include 'admin/_sidebar.html' %}
+
+    <!-- Admin Content -->
+    <div class="admin-content">
+        <div class="admin-topbar">
+            <h2>Admin Dashboard</h2>
+            <div class="admin-user">
+                <i class="fas fa-user-shield"></i>
+                <span>{{ session.username }}</span>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="fas fa-message"></i></div>
+                <div class="stat-info">
+                    <h3>{{ total_messages }}</h3>
+                    <p>Total Messages</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon orange"><i class="fas fa-triangle-exclamation"></i></div>
+                <div class="stat-info">
+                    <h3>{{ total_suspicious }}</h3>
+                    <p>Total Suspicious</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon red"><i class="fas fa-user-slash"></i></div>
+                <div class="stat-info">
+                    <h3>{{ total_blocked }}</h3>
+                    <p>Account Blocked</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple"><i class="fas fa-bell"></i></div>
+                <div class="stat-info">
+                    <h3>{{ unread_alerts }}</h3>
+                    <p>Unread Alerts</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="dashboard-grid">
+            <!-- Recent Suspicious Messages -->
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <h3>Recent Suspicious Messages</h3>
+                    <a href="{{ url_for('admin.suspicious') }}" class="btn-sm">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_suspicious %}
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Sender</th>
+                                <th>Receiver</th>
+                                <th>Threat Type</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for msg in recent_suspicious %}
+                            <tr>
+                                <td>{{ msg.sender }}</td>
+                                <td>{{ msg.receiver }}</td>
+                                <td><span class="threat-badge {{ msg.threat_type }}">{{ msg.threat_type.replace('_', ' ').title() }}</span></td>
+                                <td>{{ msg.sent_at.strftime('%d/%m %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-check-circle"></i>
+                        <p>No suspicious messages detected</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Alert & Notification -->
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <h3>Alert & Notification</h3>
+                    <a href="{{ url_for('admin.alerts') }}" class="btn-sm">View All</a>
+                </div>
+                <div class="card-body">
+                    <!-- Threat Breakdown Chart -->
+                    {% if threat_breakdown %}
+                    <canvas id="threatChart" height="180" style="margin-bottom:16px;"></canvas>
+                    {% else %}
+                    <canvas id="threatChart" height="180" style="display:none; margin-bottom:16px;"></canvas>
+                    {% endif %}
+
+                    {% if recent_alerts %}
+                    <div class="alert-list">
+                        {% for alert in recent_alerts %}
+                        <div class="alert-item severity-{{ alert.severity }}">
+                            <div class="alert-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="alert-content">
+                                <strong>{{ alert.username }}</strong>
+                                <span>{{ alert.threat_type.replace('_', ' ').title() if alert.threat_type else 'Alert' }}</span>
+                                <small>{{ alert.created_at.strftime('%d/%m %H:%M') if alert.created_at else 'Just now' }}</small>
+                            </div>
+                            <button class="resolve-btn" onclick="resolveAlert({{ alert.alert_id }}, this)">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-bell-slash"></i>
+                        <p>No unread alerts</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Reports Links -->
+        <div class="reports-links">
+            <h3>Reports</h3>
+            <div class="report-btns">
+                <a href="{{ url_for('admin.reports') }}" class="report-btn">
+                    Security Reports
+                </a>
+                <a href="{{ url_for('admin.suspicious') }}" class="report-btn">
+                    Suspicious Message History
+                </a>
+                <a href="{{ url_for('admin.audit_logs') }}" class="report-btn">
+                    Audit Logs
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+const threatData = {{ threat_breakdown | tojson }};
+const labels = threatData.map(t => t.threat_type.replace(/_/g, ' '));
+const data = threatData.map(t => t.count);
+
+const canvasEl = document.getElementById('threatChart');
+if (labels.length > 0 && canvasEl) {
+    canvasEl.style.display = 'block';
+    new Chart(canvasEl, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#8b5cf6']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+} else if (canvasEl) {
+    canvasEl.style.display = 'none';
+}
+
+function resolveAlert(alertId, btn) {
+    fetch(`/admin/alerts/${alertId}/resolve`, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                btn.closest('.alert-item').style.opacity = '0.5';
+                btn.disabled = true;
+            }
+        });
+}
+</script>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+<div class="admin-sidebar">
+    <nav class="admin-nav">
+        <a href="{{ url_for('admin.dashboard') }}" class="nav-item {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+            <i class="fas fa-gauge"></i> Dashboard
+        </a>
+        <a href="{{ url_for('admin.suspicious') }}" class="nav-item {% if request.endpoint == 'admin.suspicious' %}active{% endif %}">
+            <i class="fas fa-triangle-exclamation"></i> Suspicious
+        </a>
+        <a href="{{ url_for('admin.alerts') }}" class="nav-item {% if request.endpoint == 'admin.alerts' %}active{% endif %}">
+            <i class="fas fa-bell"></i> Alerts
+            {% if unread_alerts_count > 0 %}
+            <span class="badge">{{ unread_alerts_count }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('admin.users') }}" class="nav-item {% if request.endpoint == 'admin.users' %}active{% endif %}">
+            <i class="fas fa-users"></i> Users
+        </a>
+        <a href="{{ url_for('admin.reports') }}" class="nav-item {% if request.endpoint == 'admin.reports' %}active{% endif %}">
+            <i class="fas fa-chart-bar"></i> Reports
+        </a>
+        <a href="{{ url_for('admin.audit_logs') }}" class="nav-item {% if request.endpoint == 'admin.audit_logs' %}active{% endif %}">
+            <i class="fas fa-list-check"></i> Audit Logs
+        </a>
+        <a href="{{ url_for('admin.settings') }}" class="nav-item {% if request.endpoint == 'admin.settings' %}active{% endif %}">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </nav>
+    <a href="{{ url_for('auth.logout') }}" class="nav-item nav-logout">
+        <i class="fas fa-sign-out-alt"></i> Logout
+    </a>
+</div>

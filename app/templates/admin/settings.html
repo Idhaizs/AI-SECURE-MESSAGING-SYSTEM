@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block title %}Settings - Admin{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+{% block content %}
+<div class="admin-app-container">
+    <div class="admin-top-brandbar">
+        <div class="brand-title">
+            <i class="fas fa-shield-halved"></i>
+            <span>AI Secure Messaging System</span>
+        </div>
+        <div class="admin-portal-tag">Admin Portal</div>
+    </div>
+    <div class="admin-wrapper">
+        {% include 'admin/_sidebar.html' %}
+    <div class="admin-content">
+        <div class="admin-topbar">
+            <h2><i class="fas fa-cog"></i> Settings</h2>
+            <div class="admin-user"><i class="fas fa-user-shield"></i><span>{{ session.username }}</span></div>
+        </div>
+        <div class="page-content">
+            
+            <!-- Live Security Policy Controls (Item 2) -->
+            <div class="dashboard-card" style="margin-bottom:20px">
+                <div class="card-header">
+                    <h3><i class="fas fa-sliders"></i> Live Security Policy Controls</h3>
+                </div>
+                <div class="card-body">
+                    <form id="settingsForm" onsubmit="submitSettings(event)">
+                        <!-- Toggle Switch: Auto Block Threats -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:14px">
+                            <div>
+                                <strong style="font-size:14px;color:#1e293b;display:block">Auto-Block Suspicious Messages & Threats</strong>
+                                <small style="color:#64748b;font-size:12px">When enabled, AI will automatically block messages detected as high-risk threats.</small>
+                            </div>
+                            <label class="switch" style="position:relative;display:inline-block;width:48px;height:26px;">
+                                <input type="checkbox" id="autoBlockToggle" {{ 'checked' if auto_block == 'true' else '' }} style="opacity:0;width:0;height:0;">
+                                <span class="slider round" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.4s;border-radius:26px;"></span>
+                            </label>
+                        </div>
+
+                        <!-- Dropdown Select: Max File Upload Size -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:16px">
+                            <div>
+                                <strong style="font-size:14px;color:#1e293b;display:block">Maximum File Upload Limit (MB)</strong>
+                                <small style="color:#64748b;font-size:12px">Maximum file upload size limit allowed for users.</small>
+                            </div>
+                            <select id="maxFileSizeSelect" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;background:white;font-weight:600;">
+                                <option value="10" {{ 'selected' if max_file_size == '10' else '' }}>10 MB</option>
+                                <option value="25" {{ 'selected' if max_file_size == '25' else '' }}>25 MB (Default)</option>
+                                <option value="50" {{ 'selected' if max_file_size == '50' else '' }}>50 MB</option>
+                                <option value="100" {{ 'selected' if max_file_size == '100' else '' }}>100 MB</option>
+                            </select>
+                        </div>
+
+                        <div style="display:flex;justify-content:flex-end">
+                            <button type="submit" class="btn btn-primary btn-sm" id="saveSettingsBtn">
+                                <i class="fas fa-save"></i> Save Security Policy
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- System Information -->
+            <div class="dashboard-card">
+                <div class="card-header"><h3><i class="fas fa-info-circle"></i> System Information</h3></div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <tbody>
+                            <tr><td><strong>System Name</strong></td><td>AI Secure Messaging System</td></tr>
+                            <tr><td><strong>Version</strong></td><td>1.0.0</td></tr>
+                            <tr><td><strong>Backend</strong></td><td>Python Flask + Flask-SocketIO</td></tr>
+                            <tr><td><strong>Database</strong></td><td>MariaDB (secure_messaging)</td></tr>
+                            <tr><td><strong>Encryption</strong></td><td>AES-256 (Fernet) + TLS</td></tr>
+                            <tr><td><strong>AI Detection</strong></td><td>Gemini API + Scikit-learn + NLTK</td></tr>
+                            <tr><td><strong>File Scanning</strong></td><td>VirusTotal API (SHA-256 Hash)</td></tr>
+                            <tr><td><strong>Real-time</strong></td><td>Flask-SocketIO + Eventlet</td></tr>
+                            <tr><td><strong>Client</strong></td><td>Salwa, Fairuz & Co.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.slider:before {
+    position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;
+}
+input:checked + .slider { background-color: #1A2B4C; }
+input:checked + .slider:before { transform: translateX(22px); }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function submitSettings(e) {
+    e.preventDefault();
+    const autoBlock = document.getElementById('autoBlockToggle').checked;
+    const maxFileSize = document.getElementById('maxFileSizeSelect').value;
+    const btn = document.getElementById('saveSettingsBtn');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    try {
+        const res = await fetch('/admin/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auto_block: autoBlock, max_file_size: maxFileSize })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ Security policy settings saved successfully!');
+        } else {
+            alert('❌ Failed to save settings');
+        }
+    } catch (err) {
+        alert('Failed to save settings');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Security Policy';
+    }
+}
+</script>
+</div>
+{% endblock %}
