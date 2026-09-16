@@ -31,7 +31,9 @@ def dashboard():
     total_messages = query_db("SELECT COUNT(*) as count FROM messages", one=True)['count']
     total_suspicious = query_db("SELECT COUNT(*) as count FROM messages WHERE is_flagged = 1", one=True)['count']
     total_blocked = query_db("SELECT COUNT(*) as count FROM users WHERE status = 'blocked'", one=True)['count']
-    unread_alerts = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)['count']
+    unread_alerts_count = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)['count']
+    unread_flagged_count = query_db("SELECT COUNT(*) as count FROM messages WHERE is_flagged = 1", one=True)['count']
+    unread_alerts = max(unread_alerts_count, unread_flagged_count)
     
     # Recent suspicious messages
     recent_suspicious = query_db("""
@@ -46,11 +48,20 @@ def dashboard():
     
     # Recent alerts
     recent_alerts = query_db("""
-        SELECT a.*, u.username 
+        SELECT a.id as alert_id, a.threat_type, a.severity, a.created_at, u.username 
         FROM alerts a JOIN users u ON a.user_id = u.user_id
         WHERE a.status = 'unread'
         ORDER BY a.created_at DESC LIMIT 5
     """)
+
+    if not recent_alerts:
+        flagged_alerts = query_db("""
+            SELECT m.id as alert_id, m.threat_type, 'high' as severity, m.sent_at as created_at, s.username
+            FROM messages m JOIN users s ON m.sender_id = s.user_id
+            WHERE m.is_flagged = 1
+            ORDER BY m.sent_at DESC LIMIT 5
+        """)
+        recent_alerts = flagged_alerts
     
     # Threat breakdown for chart
     threat_breakdown = query_db("""
