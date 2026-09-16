@@ -32,9 +32,9 @@
                                 <strong style="font-size:14px;color:#1e293b;display:block">Auto-Block Suspicious Messages & Threats</strong>
                                 <small style="color:#64748b;font-size:12px">When enabled, AI will automatically block messages detected as high-risk threats.</small>
                             </div>
-                            <div style="display:flex;align-items:center;">
-                                <span id="toggleStatusLabel" style="font-size:12px;font-weight:700;margin-right:12px;color:{{ '#10b981' if auto_block == 'true' else '#ef4444' }};">
-                                    {{ '🟢 ENABLED (ON)' if auto_block == 'true' else '🔴 DISABLED (OFF)' }}
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span id="toggleStatusLabel" style="font-size:13px;font-weight:700;color:{{ '#10b981' if auto_block == 'true' else '#ef4444' }};">
+                                    {{ 'ON' if auto_block == 'true' else 'OFF' }}
                                 </span>
                                 <label class="switch" style="position:relative;display:inline-block;width:50px;height:26px;">
                                     <input type="checkbox" id="autoBlockToggle" {{ 'checked' if auto_block == 'true' else '' }} onchange="updateToggleLabel(this)" style="opacity:0;width:0;height:0;">
@@ -116,10 +116,10 @@ input:checked + .slider:before {
 function updateToggleLabel(cb) {
     const lbl = document.getElementById('toggleStatusLabel');
     if (cb.checked) {
-        lbl.textContent = '🟢 ENABLED (ON)';
+        lbl.textContent = 'ON';
         lbl.style.color = '#10b981';
     } else {
-        lbl.textContent = '🔴 DISABLED (OFF)';
+        lbl.textContent = 'OFF';
         lbl.style.color = '#ef4444';
     }
 }
