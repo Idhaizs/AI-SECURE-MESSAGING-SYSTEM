@@ -151,12 +151,19 @@ def send_message():
     
     # Create alert & auto-block user account if suspicious
     if is_flagged:
+        sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
+        receiver_info = query_db("SELECT username FROM users WHERE user_id = %s", (receiver_id,), one=True)
+        sender_name = sender_info['username'] if sender_info else f"User {user_id}"
+        receiver_name = receiver_info['username'] if receiver_info else f"User {receiver_id}"
+        
         query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
+        
+        alert_detail = f"User '{sender_name}' sent {threat_type} to '{receiver_name}': \"{content[:100]}\" ({scan_result.get('detail', '')})"
         query_db(
             "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, %s, %s, %s)",
-            (message_id, user_id, threat_type, scan_result['detail'], 'high'), commit=True
+            (message_id, user_id, threat_type, alert_detail, 'high'), commit=True
         )
-        log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"Threat: {threat_type} - {scan_result['detail']}")
+        log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for sending {threat_type} to '{receiver_name}': \"{content[:100]}\"")
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
@@ -204,15 +211,36 @@ def upload_file():
     if file_size_bytes > max_mb * 1024 * 1024:
         return jsonify({'success': False, 'error': f"File exceeds maximum allowed limit of {max_mb}MB"}), 400
     
+    sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
+    receiver_info = query_db("SELECT username FROM users WHERE user_id = %s", (receiver_id,), one=True) if receiver_id else None
+    sender_name = sender_info['username'] if sender_info else f"User {user_id}"
+    receiver_name = receiver_info['username'] if receiver_info else "System"
+    
     # Check extension
     ext_check = check_file_extension(file.filename)
     if ext_check['is_suspicious']:
         query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
-        query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (NULL, %s, 'suspicious_attachment', %s, 'high')",
-            (user_id, ext_check['detail']), commit=True
+        
+        # Insert flagged message record for visibility in suspicious messages table
+        encrypted_blocked_content = encrypt_message(f"🚫 Blocked File Threat Attempt: {file.filename} (Extension: {ext_check['extension']})")
+        msg_id = query_db(
+            "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'file', 1, 'suspicious_attachment', 0)",
+            (user_id, receiver_id or 0, encrypted_blocked_content), commit=True
         )
-        log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, ext_check['detail'])
+        query_db("UPDATE messages SET message_id = id WHERE id = %s", (msg_id,), commit=True)
+        
+        # Insert file record
+        query_db(
+            "INSERT INTO files (uploader_id, user_id, receiver_id, message_id, file_name, file_hash, file_path, is_scanned, scan_result, original_filename, stored_filename, encrypted_key, iv, is_password_protected) VALUES (%s, %s, %s, %s, %s, '', '', 1, 'blocked', %s, %s, '', '', 0)",
+            (user_id, user_id, receiver_id or 0, msg_id, file.filename, file.filename, file.filename), commit=True
+        )
+        
+        alert_detail = f"User '{sender_name}' was AUTO-BLOCKED attempting to upload suspicious file: '{file.filename}' (Extension: {ext_check['extension']})"
+        query_db(
+            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, 'suspicious_attachment', %s, 'high')",
+            (msg_id, user_id, alert_detail), commit=True
+        )
+        log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for attempting to upload blocked file: '{file.filename}'")
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
@@ -242,11 +270,20 @@ def upload_file():
     if scan_result == 'malicious':
         os.remove(file_path)
         query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
-        query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (NULL, %s, 'malicious_file', 'VirusTotal scan confirmed malicious file', 'high')",
-            (user_id,), commit=True
+        
+        encrypted_malicious_content = encrypt_message(f"🚫 VirusTotal Malicious File: {filename}")
+        msg_id = query_db(
+            "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'file', 1, 'malicious_file', 0)",
+            (user_id, receiver_id or 0, encrypted_malicious_content), commit=True
         )
-        log_action(user_id, 'AUTO_BLOCK_MALICIOUS_FILE', request.remote_addr, 'VirusTotal detected malicious file')
+        query_db("UPDATE messages SET message_id = id WHERE id = %s", (msg_id,), commit=True)
+        
+        alert_detail = f"User '{sender_name}' was AUTO-BLOCKED for uploading malicious file '{filename}' confirmed by VirusTotal scan."
+        query_db(
+            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, 'malicious_file', %s, 'high')",
+            (msg_id, user_id, alert_detail), commit=True
+        )
+        log_action(user_id, 'AUTO_BLOCK_MALICIOUS_FILE', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for malicious file: '{filename}' (VirusTotal scan confirmed)")
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')

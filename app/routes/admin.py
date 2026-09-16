@@ -69,31 +69,87 @@ def dashboard():
         threat_breakdown=list(threat_breakdown)
     )
 
+# ─── Unread Alerts API (For Real-time Badge & Toast Notifications) ────
+@admin_bp.route('/admin/api/unread-alerts')
+@admin_required
+def unread_alerts_api():
+    unread = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)
+    latest_alert = query_db("""
+        SELECT a.*, u.username 
+        FROM alerts a 
+        LEFT JOIN users u ON a.user_id = u.user_id 
+        WHERE a.status = 'unread' 
+        ORDER BY a.created_at DESC LIMIT 1
+    """, one=True)
+    return jsonify({
+        'unread_count': unread['count'] if unread else 0,
+        'latest_alert': dict(latest_alert) if latest_alert else None
+    })
+
 # ─── Suspicious Messages ──────────────────────────────────────────
 @admin_bp.route('/admin/suspicious')
 @admin_required
 def suspicious():
     messages = query_db("""
-        SELECT m.message_id, m.threat_type, m.sent_at, m.is_flagged,
-               s.username as sender, r.username as receiver
+        SELECT m.id, m.message_id, m.threat_type, m.sent_at, m.is_flagged, m.encrypted_content, m.message_type,
+               s.username as sender, s.status as sender_status,
+               COALESCE(r.username, 'System / Receiver') as receiver,
+               f.file_name
         FROM messages m
         JOIN users s ON m.sender_id = s.user_id
-        JOIN users r ON m.receiver_id = r.user_id
+        LEFT JOIN users r ON m.receiver_id = r.user_id
+        LEFT JOIN files f ON (m.id = f.message_id OR m.message_id = f.message_id)
         WHERE m.is_flagged = 1
         ORDER BY m.sent_at DESC
     """)
-    return render_template('admin/suspicious.html', messages=messages)
+    
+    from app.utils.encryption import decrypt_message
+    formatted_messages = []
+    for msg in messages:
+        msg_dict = dict(msg)
+        try:
+            content = decrypt_message(msg['encrypted_content'])
+            if isinstance(content, bytes):
+                content = content.decode('utf-8', errors='ignore')
+            msg_dict['content'] = content
+        except Exception:
+            msg_dict['content'] = msg.get('file_name') or "Encrypted Content"
+        formatted_messages.append(msg_dict)
+
+    return render_template('admin/suspicious.html', messages=formatted_messages)
 
 # ─── Alerts ───────────────────────────────────────────────────────
 @admin_bp.route('/admin/alerts')
 @admin_required
 def alerts():
-    alerts = query_db("""
-        SELECT a.*, u.username 
-        FROM alerts a JOIN users u ON a.user_id = u.user_id
+    alerts_list = query_db("""
+        SELECT a.*, u.username, u.status as user_status,
+               m.encrypted_content, m.message_type,
+               r.username as receiver_name
+        FROM alerts a 
+        LEFT JOIN users u ON a.user_id = u.user_id
+        LEFT JOIN messages m ON (a.message_id = m.id OR a.message_id = m.message_id)
+        LEFT JOIN users r ON m.receiver_id = r.user_id
         ORDER BY a.created_at DESC
     """)
-    return render_template('admin/alerts.html', alerts=alerts)
+    
+    from app.utils.encryption import decrypt_message
+    formatted_alerts = []
+    for alert in alerts_list:
+        alert_dict = dict(alert)
+        if alert.get('encrypted_content'):
+            try:
+                content = decrypt_message(alert['encrypted_content'])
+                if isinstance(content, bytes):
+                    content = content.decode('utf-8', errors='ignore')
+                alert_dict['attempted_content'] = content
+            except Exception:
+                alert_dict['attempted_content'] = alert.get('alert_detail', '')
+        else:
+            alert_dict['attempted_content'] = alert.get('alert_detail', '')
+        formatted_alerts.append(alert_dict)
+
+    return render_template('admin/alerts.html', alerts=formatted_alerts)
 
 # ─── Mark Alert Read ──────────────────────────────────────────────
 @admin_bp.route('/admin/alerts/<int:alert_id>/read', methods=['POST'])

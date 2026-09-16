@@ -43,11 +43,15 @@
                         <div style="min-width:180px;">
                             <select id="filterActionSelect" onchange="filterLogs()" style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;background:white;">
                                 <option value="ALL">All Actions</option>
+                                <option value="AUTO_BLOCK">AUTO_BLOCK (All Block Events)</option>
                                 <option value="LOGIN">LOGIN</option>
                                 <option value="FAILED_LOGIN">FAILED_LOGIN</option>
                                 <option value="SEND_MESSAGE">SEND_MESSAGE</option>
                                 <option value="UPLOAD_FILE">UPLOAD_FILE</option>
-                                <option value="SUSPICIOUS_MESSAGE">SUSPICIOUS_MESSAGE</option>
+                                <option value="AUTO_BLOCK_SUSPICIOUS">AUTO_BLOCK_SUSPICIOUS</option>
+                                <option value="AUTO_BLOCK_FILE_THREAT">AUTO_BLOCK_FILE_THREAT</option>
+                                <option value="AUTO_BLOCK_MALICIOUS_FILE">AUTO_BLOCK_MALICIOUS_FILE</option>
+                                <option value="AUTO_BLOCK_BRUTE_FORCE">AUTO_BLOCK_BRUTE_FORCE</option>
                                 <option value="ADMIN_CREATE_USER">ADMIN_CREATE_USER</option>
                                 <option value="ADMIN_DELETE_USER">ADMIN_DELETE_USER</option>
                             </select>
@@ -63,9 +67,15 @@
                         <tr class="log-row" id="log-row-{{ log.log_id }}" data-action="{{ log.action }}" data-user="{{ log.username or 'System' }}" data-detail="{{ log.detail or '' }}" data-ip="{{ log.ip_address or '' }}">
                             <td style="white-space:nowrap">{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') if log.timestamp else '-' }}</td>
                             <td><strong>{{ log.username or 'System' }}</strong></td>
-                            <td><span class="threat-badge phishing" style="background:#eff6ff;color:#1d4ed8">{{ log.action }}</span></td>
+                            <td>
+                                {% if 'AUTO_BLOCK' in log.action or 'BLOCKED' in log.action %}
+                                <span class="threat-badge malicious_link" style="background:#fee2e2;color:#dc2626;font-weight:700;">🚫 {{ log.action }}</span>
+                                {% else %}
+                                <span class="threat-badge phishing" style="background:#eff6ff;color:#1d4ed8">{{ log.action }}</span>
+                                {% endif %}
+                            </td>
                             <td style="font-size:12px;color:#64748b">{{ log.ip_address or '-' }}</td>
-                            <td style="font-size:12px;color:#64748b;max-width:220px">{{ log.detail or '-' }}</td>
+                            <td style="font-size:12px;color:#334155;max-width:280px;word-break:break-word;"><strong>{{ log.detail or '-' }}</strong></td>
                             <td>
                                 <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;" onclick="deleteAuditLog({{ log.log_id }})">
                                     <i class="fas fa-trash"></i>
@@ -98,7 +108,7 @@ function filterLogs() {
         const rowDetail = row.dataset.detail.toLowerCase();
         const rowIp = row.dataset.ip.toLowerCase();
 
-        const matchesAction = (action === 'ALL' || rowAction === action);
+        const matchesAction = (action === 'ALL' || rowAction === action || (action === 'AUTO_BLOCK' && rowAction.includes('AUTO_BLOCK')));
         const matchesSearch = (!search || rowUser.includes(search) || rowDetail.includes(search) || rowIp.includes(search) || rowAction.toLowerCase().includes(search));
 
         if (matchesAction && matchesSearch) {

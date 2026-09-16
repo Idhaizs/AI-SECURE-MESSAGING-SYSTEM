@@ -8,9 +8,7 @@
         </a>
         <a href="{{ url_for('admin.alerts') }}" class="nav-item {% if request.endpoint == 'admin.alerts' %}active{% endif %}">
             <i class="fas fa-bell"></i> Alerts
-            {% if unread_alerts_count > 0 %}
-            <span class="badge">{{ unread_alerts_count }}</span>
-            {% endif %}
+            <span class="badge" id="adminSidebarAlertsBadge" style="background:#ef4444;color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:auto;{% if not unread_alerts_count %}display:none;{% endif %}">{{ unread_alerts_count or 0 }}</span>
         </a>
         <a href="{{ url_for('admin.users') }}" class="nav-item {% if request.endpoint == 'admin.users' %}active{% endif %}">
             <i class="fas fa-users"></i> Users
@@ -29,3 +27,36 @@
         <i class="fas fa-sign-out-alt"></i> Logout
     </a>
 </div>
+
+<script>
+(function() {
+    let lastUnreadCount = null;
+    async function checkAdminAlerts() {
+        try {
+            const res = await fetch('/admin/api/unread-alerts');
+            if (res.ok) {
+                const data = await res.json();
+                const badge = document.getElementById('adminSidebarAlertsBadge');
+                if (badge) {
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count;
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+                
+                if (lastUnreadCount !== null && data.unread_count > lastUnreadCount && data.latest_alert) {
+                    const alertMsg = `🚨 THREAT DETECTED!\nUser: ${data.latest_alert.username || 'User'}\nThreat: ${data.latest_alert.threat_type}\nDetail: ${data.latest_alert.alert_detail || ''}`;
+                    if (typeof showAdminToast === 'function') {
+                        showAdminToast(alertMsg);
+                    }
+                }
+                lastUnreadCount = data.unread_count;
+            }
+        } catch (e) {}
+    }
+    setInterval(checkAdminAlerts, 3000);
+    checkAdminAlerts();
+})();
+</script>

@@ -23,14 +23,23 @@
                 <div class="card-body">
                     {% if alerts %}
                     <table class="data-table">
-                        <thead><tr><th>User</th><th>Threat Type</th><th>Detail</th><th>Severity</th><th>Status</th><th>Time</th><th>Action</th></tr></thead>
+                        <thead><tr><th>User</th><th>User Status</th><th>Threat Type</th><th>Attempted Content / Detail</th><th>Severity</th><th>Status</th><th>Time</th><th>Action</th></tr></thead>
                         <tbody>
                         {% for alert in alerts %}
                         <tr id="alert-row-{{ alert.alert_id or alert.id }}">
                             <td><strong>{{ alert.username or 'System' }}</strong></td>
+                            <td>
+                                {% if alert.user_status == 'blocked' %}
+                                <span class="status-badge blocked" style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;">🚫 Auto-Blocked</span>
+                                {% else %}
+                                <span class="status-badge active" style="background:#dcfce7;color:#166534;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;">Active</span>
+                                {% endif %}
+                            </td>
                             <td><span class="threat-badge {{ alert.threat_type }}">{{ alert.threat_type.replace('_',' ').title() if alert.threat_type else 'Alert' }}</span></td>
-                            <td style="max-width:200px;font-size:12px;color:#64748b">{{ alert.alert_detail or alert.details or '-' }}</td>
-                            <td><span class="threat-badge {{ alert.severity }}">{{ alert.severity.title() if alert.severity else 'Normal' }}</span></td>
+                            <td style="max-width:280px;word-break:break-word;font-size:12px;color:#334155;background:#f8fafc;padding:8px;border-radius:6px;border:1px solid #e2e8f0;">
+                                <strong>{{ alert.attempted_content or alert.alert_detail or '-' }}</strong>
+                            </td>
+                            <td><span class="threat-badge {{ alert.severity }}">{{ alert.severity.title() if alert.severity else 'High' }}</span></td>
                             <td><span class="status-badge {{ 'active' if alert.status == 'resolved' else 'blocked' }}" id="status-{{ alert.alert_id or alert.id }}">{{ alert.status.title() if alert.status else 'Unread' }}</span></td>
                             <td>{{ alert.created_at.strftime('%d/%m %H:%M') if alert.created_at else '-' }}</td>
                             <td style="display:flex;gap:6px;align-items:center;">

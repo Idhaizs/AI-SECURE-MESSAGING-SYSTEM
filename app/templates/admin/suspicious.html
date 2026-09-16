@@ -23,24 +23,34 @@
                 <div class="card-body">
                     {% if messages %}
                     <table class="data-table">
-                        <thead><tr><th>#</th><th>Sender</th><th>Receiver</th><th>Threat Type</th><th>Time</th><th>Action</th></tr></thead>
+                        <thead><tr><th>#</th><th>Sender</th><th>Sender Status</th><th>Receiver</th><th>Threat Type</th><th>Attempted Message / File</th><th>Time</th><th>Action</th></tr></thead>
                         <tbody>
                         {% for msg in messages %}
-                        <tr id="msg-row-{{ msg.message_id }}">
-                            <td>#{{ msg.message_id }}</td>
+                        <tr id="msg-row-{{ msg.message_id or msg.id }}">
+                            <td>#{{ msg.message_id or msg.id }}</td>
                             <td><strong>{{ msg.sender }}</strong></td>
+                            <td>
+                                {% if msg.sender_status == 'blocked' %}
+                                <span class="status-badge blocked" style="background:#fee2e2;color:#dc2626;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;">🚫 Auto-Blocked</span>
+                                {% else %}
+                                <span class="status-badge active" style="background:#dcfce7;color:#166534;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;">Active</span>
+                                {% endif %}
+                            </td>
                             <td>{{ msg.receiver }}</td>
                             <td><span class="threat-badge {{ msg.threat_type }}">{{ msg.threat_type.replace('_',' ').title() }}</span></td>
+                            <td style="max-width:240px;word-break:break-word;font-size:12px;color:#334155;background:#f8fafc;padding:8px;border-radius:6px;border:1px solid #e2e8f0;">
+                                <strong>{{ msg.content or msg.file_name or 'Attempted Content' }}</strong>
+                            </td>
                             <td>{{ msg.sent_at.strftime('%d/%m/%Y %H:%M') if msg.sent_at else '-' }}</td>
                             <td>
-                                <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:6px 12px;border-radius:6px;font-weight:600;" onclick="deleteSuspiciousMessage({{ msg.message_id }})">
-                                    <i class="fas fa-trash"></i> Delete Message
+                                <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:6px 12px;border-radius:6px;font-weight:600;" onclick="deleteSuspiciousMessage({{ msg.message_id or msg.id }})">
+                                    <i class="fas fa-trash"></i> Delete
                                 </button>
                             </td>
                         </tr>
                         {% endfor %}
                         {% if not messages %}
-                        <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px">No suspicious messages detected</td></tr>
+                        <tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:40px">No suspicious messages detected</td></tr>
                         {% endif %}
                         </tbody>
                     </table>
