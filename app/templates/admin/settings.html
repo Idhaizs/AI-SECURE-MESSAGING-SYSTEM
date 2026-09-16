@@ -14,7 +14,7 @@
         {% include 'admin/_sidebar.html' %}
     <div class="admin-content">
         <div class="admin-topbar">
-            <h2><i class="fas fa-cog"></i> Settings</h2>
+            <h2>Settings</h2>
             <div class="admin-user"><i class="fas fa-user-shield"></i><span>{{ session.username }}</span></div>
         </div>
         <div class="page-content">
@@ -22,7 +22,7 @@
             <!-- Live Security Policy Controls (Item 2) -->
             <div class="dashboard-card" style="margin-bottom:20px">
                 <div class="card-header">
-                    <h3><i class="fas fa-sliders"></i> Live Security Policy Controls</h3>
+                    <h3>Live Security Policy Controls</h3>
                 </div>
                 <div class="card-body">
                     <form id="settingsForm" onsubmit="submitSettings(event)">
@@ -59,7 +59,7 @@
 
                         <div style="display:flex;justify-content:flex-end">
                             <button type="submit" class="btn btn-primary btn-sm" id="saveSettingsBtn">
-                                <i class="fas fa-save"></i> Save Security Policy
+                                Save Security Policy
                             </button>
                         </div>
                     </form>
@@ -68,7 +68,7 @@
 
             <!-- System Information -->
             <div class="dashboard-card">
-                <div class="card-header"><h3><i class="fas fa-info-circle"></i> System Information</h3></div>
+                <div class="card-header"><h3>System Information</h3></div>
                 <div class="card-body">
                     <table class="data-table">
                         <tbody>
