@@ -177,26 +177,74 @@
 .stat-info p { font-size: 13px; color: #64748B; margin-top: 2px; }
 
 /* ─── Dashboard Grid ─────────────────────────────── */
-.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; align-items: start; }
+.dashboard-grid { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 20px; 
+    padding: 0 24px 24px; 
+    align-items: stretch; 
+}
 
-.dashboard-card { background: white; border-radius: 8px; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+.dashboard-card { 
+    background: white; 
+    border-radius: 12px; 
+    border: 1px solid #E2E8F0; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02); 
+    overflow: hidden; 
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 380px;
+}
 
 .chart-wrapper {
     position: relative;
-    max-width: 260px;
-    height: 210px;
+    width: 100%;
+    max-width: 340px;
+    height: 250px;
     margin: 0 auto 16px auto;
 }
 
 .card-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px; border-bottom: 1px solid var(--gray-100);
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    padding: 16px 22px; 
+    background: #FAFAFA;
+    border-bottom: 1px solid #E2E8F0;
 }
 
-.card-header h3 { font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
-.card-header h3 i { color: var(--accent); }
+.card-header h3 { 
+    font-size: 15px; 
+    font-weight: 700; 
+    color: #1E293B; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+}
+.card-header h3 i { color: #2563EB; }
 
-.card-body { padding: 16px 20px; }
+.btn-sm {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #F1F5F9;
+    color: #475569;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.btn-sm:hover {
+    background: #1A2B4C;
+    color: #ffffff;
+}
+
+.card-body { 
+    padding: 20px; 
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
 
 /* ─── Data Table ─────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
