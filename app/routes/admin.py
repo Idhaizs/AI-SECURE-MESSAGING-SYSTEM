@@ -73,16 +73,33 @@ def dashboard():
 @admin_bp.route('/admin/api/unread-alerts')
 @admin_required
 def unread_alerts_api():
-    unread = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)
+    unread_alerts_count = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)['count']
+    unread_flagged_count = query_db("SELECT COUNT(*) as count FROM messages WHERE is_flagged = 1", one=True)['count']
+    total_unread = max(unread_alerts_count, unread_flagged_count)
+    
     latest_alert = query_db("""
-        SELECT a.*, u.username 
+        SELECT a.*, COALESCE(u.username, u2.username, 'System') as username 
         FROM alerts a 
         LEFT JOIN users u ON a.user_id = u.user_id 
-        WHERE a.status = 'unread' 
-        ORDER BY a.created_at DESC LIMIT 1
+        LEFT JOIN users u2 ON a.triggered_by_id = u2.user_id
+        ORDER BY a.id DESC LIMIT 1
     """, one=True)
+    
+    if not latest_alert:
+        latest_msg = query_db("""
+            SELECT m.threat_type, s.username, m.sent_at as created_at
+            FROM messages m JOIN users s ON m.sender_id = s.user_id
+            WHERE m.is_flagged = 1 ORDER BY m.id DESC LIMIT 1
+        """, one=True)
+        if latest_msg:
+            latest_alert = {
+                'username': latest_msg['username'],
+                'threat_type': latest_msg['threat_type'],
+                'alert_detail': f"Flagged threat message detected from {latest_msg['username']}"
+            }
+
     return jsonify({
-        'unread_count': unread['count'] if unread else 0,
+        'unread_count': total_unread,
         'latest_alert': dict(latest_alert) if latest_alert else None
     })
 
@@ -123,20 +140,39 @@ def suspicious():
 @admin_required
 def alerts():
     alerts_list = query_db("""
-        SELECT a.*, u.username, u.status as user_status,
+        SELECT a.id as id, COALESCE(a.alert_id, a.id) as alert_id, a.*, 
+               COALESCE(u.username, u2.username, 'System') as username,
+               COALESCE(u.status, u2.status, 'active') as user_status,
                m.encrypted_content, m.message_type,
                r.username as receiver_name
         FROM alerts a 
         LEFT JOIN users u ON a.user_id = u.user_id
+        LEFT JOIN users u2 ON a.triggered_by_id = u2.user_id
         LEFT JOIN messages m ON (a.message_id = m.id OR a.message_id = m.message_id)
         LEFT JOIN users r ON m.receiver_id = r.user_id
-        ORDER BY a.created_at DESC
+        ORDER BY a.id DESC
+    """)
+    
+    flagged_messages = query_db("""
+        SELECT m.id as id, m.id as message_id, m.threat_type, m.created_at, m.sent_at, m.encrypted_content, m.message_type,
+               s.user_id, s.username, s.status as user_status,
+               r.username as receiver_name
+        FROM messages m
+        JOIN users s ON m.sender_id = s.user_id
+        LEFT JOIN users r ON m.receiver_id = r.user_id
+        WHERE m.is_flagged = 1
+        ORDER BY m.id DESC
     """)
     
     from app.utils.encryption import decrypt_message
+    existing_msg_ids = set()
     formatted_alerts = []
+    
     for alert in alerts_list:
         alert_dict = dict(alert)
+        if alert.get('message_id'):
+            existing_msg_ids.add(alert['message_id'])
+            
         if alert.get('encrypted_content'):
             try:
                 content = decrypt_message(alert['encrypted_content'])
@@ -144,11 +180,35 @@ def alerts():
                     content = content.decode('utf-8', errors='ignore')
                 alert_dict['attempted_content'] = content
             except Exception:
-                alert_dict['attempted_content'] = alert.get('alert_detail', '')
+                alert_dict['attempted_content'] = alert.get('alert_detail') or alert.get('details') or ''
         else:
-            alert_dict['attempted_content'] = alert.get('alert_detail', '')
+            alert_dict['attempted_content'] = alert.get('alert_detail') or alert.get('details') or ''
         formatted_alerts.append(alert_dict)
-
+        
+    for msg in flagged_messages:
+        if msg['id'] not in existing_msg_ids and msg.get('message_id') not in existing_msg_ids:
+            try:
+                content = decrypt_message(msg['encrypted_content'])
+                if isinstance(content, bytes):
+                    content = content.decode('utf-8', errors='ignore')
+            except Exception:
+                content = "Suspicious Content"
+                
+            formatted_alerts.append({
+                'alert_id': f"m-{msg['id']}",
+                'id': msg['id'],
+                'user_id': msg['user_id'],
+                'username': msg['username'],
+                'user_status': msg['user_status'],
+                'threat_type': msg['threat_type'],
+                'alert_detail': f"Flagged threat message from '{msg['username']}': \"{content}\"",
+                'attempted_content': content,
+                'severity': 'high',
+                'status': 'unread',
+                'created_at': msg['sent_at'] or msg['created_at']
+            })
+            
+    formatted_alerts.sort(key=lambda x: str(x.get('created_at', '')), reverse=True)
     return render_template('admin/alerts.html', alerts=formatted_alerts)
 
 # ─── Mark Alert Read ──────────────────────────────────────────────
