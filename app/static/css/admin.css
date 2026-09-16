@@ -177,9 +177,16 @@
 .stat-info p { font-size: 13px; color: #64748B; margin-top: 2px; }
 
 /* ─── Dashboard Grid ─────────────────────────────── */
-.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; }
+.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; align-items: start; }
 
 .dashboard-card { background: white; border-radius: 8px; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+
+.chart-wrapper {
+    position: relative;
+    max-width: 260px;
+    height: 210px;
+    margin: 0 auto 16px auto;
+}
 
 .card-header {
     display: flex; align-items: center; justify-content: space-between;

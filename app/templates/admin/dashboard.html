@@ -105,9 +105,13 @@
                 <div class="card-body">
                     <!-- Threat Breakdown Chart -->
                     {% if threat_breakdown %}
-                    <canvas id="threatChart" height="180" style="margin-bottom:16px;"></canvas>
+                    <div class="chart-wrapper">
+                        <canvas id="threatChart"></canvas>
+                    </div>
                     {% else %}
-                    <canvas id="threatChart" height="180" style="display:none; margin-bottom:16px;"></canvas>
+                    <div class="chart-wrapper" id="chartWrapper" style="display:none;">
+                        <canvas id="threatChart"></canvas>
+                    </div>
                     {% endif %}
 
                     {% if recent_alerts %}
@@ -166,7 +170,8 @@ const data = threatData.map(t => t.count);
 
 const canvasEl = document.getElementById('threatChart');
 if (labels.length > 0 && canvasEl) {
-    canvasEl.style.display = 'block';
+    const wrapper = canvasEl.closest('.chart-wrapper');
+    if (wrapper) wrapper.style.display = 'block';
     new Chart(canvasEl, {
         type: 'doughnut',
         data: {
@@ -178,11 +183,22 @@ if (labels.length > 0 && canvasEl) {
         },
         options: {
             responsive: true,
-            plugins: { legend: { position: 'bottom' } }
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 10,
+                        font: { size: 11 }
+                    }
+                }
+            }
         }
     });
 } else if (canvasEl) {
-    canvasEl.style.display = 'none';
+    const wrapper = canvasEl.closest('.chart-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
 }
 
 function resolveAlert(alertId, btn) {
