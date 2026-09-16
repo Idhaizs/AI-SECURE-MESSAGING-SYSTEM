@@ -358,15 +358,23 @@ def delete_user(user_id):
 @admin_required
 def reports():
     # Message stats per day (last 7 days)
-    daily_stats = query_db("""
-        SELECT DATE(sent_at) as date, 
+    raw_daily = query_db("""
+        SELECT DATE_FORMAT(sent_at, '%d %b') as date, 
                COUNT(*) as total,
                SUM(is_flagged) as suspicious
         FROM messages
         WHERE sent_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-        GROUP BY DATE(sent_at)
-        ORDER BY date ASC
+        GROUP BY DATE_FORMAT(sent_at, '%d %b'), DATE(sent_at)
+        ORDER BY DATE(sent_at) ASC
     """)
+    
+    daily_stats = []
+    for row in raw_daily:
+        daily_stats.append({
+            'date': str(row['date']),
+            'total': int(row['total'] or 0),
+            'suspicious': int(row['suspicious'] or 0)
+        })
     
     # Top threat types
     threat_stats = query_db("""
@@ -381,10 +389,22 @@ def reports():
         FROM files GROUP BY scan_result
     """)
     
+    # Overview Metrics
+    total_messages = query_db("SELECT COUNT(*) as count FROM messages", one=True)['count']
+    total_flagged = query_db("SELECT COUNT(*) as count FROM messages WHERE is_flagged = 1", one=True)['count']
+    total_files = query_db("SELECT COUNT(*) as count FROM files", one=True)['count']
+    total_blocked = query_db("SELECT COUNT(*) as count FROM users WHERE status = 'blocked'", one=True)['count']
+    threat_rate = round((total_flagged / total_messages * 100), 1) if total_messages > 0 else 0.0
+    
     return render_template('admin/reports.html',
-        daily_stats=list(daily_stats),
+        daily_stats=daily_stats,
         threat_stats=list(threat_stats),
-        file_stats=list(file_stats)
+        file_stats=list(file_stats),
+        total_messages=total_messages,
+        total_flagged=total_flagged,
+        total_files=total_files,
+        total_blocked=total_blocked,
+        threat_rate=threat_rate
     )
 
 # ─── Audit Logs ───────────────────────────────────────────────────
