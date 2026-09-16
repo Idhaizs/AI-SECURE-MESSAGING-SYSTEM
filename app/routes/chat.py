@@ -298,22 +298,23 @@ def upload_file():
     # Save message record
     encrypted_path = encrypt_message(file_path)
     message_id = query_db(
-        "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'file', %s, %s, 0)",
-        (user_id, receiver_id, encrypted_path, scan_result == 'suspicious', 'suspicious_attachment' if scan_result == 'suspicious' else 'none'),
+        "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, %s, %s, %s, 0)",
+        (user_id, receiver_id, encrypted_path, 'file', 1 if scan_result == 'suspicious' else 0, 'suspicious_attachment' if scan_result == 'suspicious' else 'none'),
         commit=True
     )
     query_db("UPDATE messages SET message_id = id WHERE id = %s", (message_id,), commit=True)
     
     # Save file record with password protection details
     file_id = query_db(
-        "INSERT INTO files (uploader_id, user_id, receiver_id, message_id, file_name, file_hash, file_path, is_scanned, scan_result, original_filename, stored_filename, encrypted_key, iv, is_password_protected, file_password_hash) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, '', '', %s, %s)",
-        (user_id, user_id, receiver_id, message_id, filename, file_hash, file_path, scan_result, filename, filename, is_password_protected, file_password_hash), commit=True
+        "INSERT INTO files (uploader_id, user_id, receiver_id, message_id, file_name, file_hash, file_path, is_scanned, scan_result, original_filename, stored_filename, encrypted_key, iv, is_password_protected, file_password_hash) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s, %s)",
+        (user_id, user_id, receiver_id, message_id, filename, file_hash, file_path, scan_result, filename, filename, '', '', is_password_protected, file_password_hash),
+        commit=True
     )
     
     if scan_result == 'suspicious':
         query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, %s, %s, %s)",
-            (message_id, user_id, 'suspicious_attachment', f"Suspicious file: {filename}", 'medium'), commit=True
+            "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (%s, %s, %s, 'suspicious_attachment', %s, 'medium', 'unread')",
+            (message_id, user_id, user_id, f"Suspicious file uploaded: {filename}"), commit=True
         )
     
     log_action(user_id, 'UPLOAD_FILE', request.remote_addr, f"File: {filename}, Protected: {is_password_protected == 1}, Scan: {scan_result}")
