@@ -396,6 +396,18 @@ def reports():
     total_blocked = query_db("SELECT COUNT(*) as count FROM users WHERE status = 'blocked'", one=True)['count']
     threat_rate = round((total_flagged / total_messages * 100), 1) if total_messages > 0 else 0.0
     
+    # Recent threat incidents for security intelligence log table
+    threat_incidents = query_db("""
+        SELECT m.id, m.threat_type, m.sent_at,
+               s.username as sender, s.status as sender_status,
+               COALESCE(r.username, 'System') as receiver
+        FROM messages m
+        JOIN users s ON m.sender_id = s.user_id
+        LEFT JOIN users r ON m.receiver_id = r.user_id
+        WHERE m.is_flagged = 1
+        ORDER BY m.sent_at DESC LIMIT 6
+    """)
+    
     return render_template('admin/reports.html',
         daily_stats=daily_stats,
         threat_stats=list(threat_stats),
@@ -404,7 +416,8 @@ def reports():
         total_flagged=total_flagged,
         total_files=total_files,
         total_blocked=total_blocked,
-        threat_rate=threat_rate
+        threat_rate=threat_rate,
+        threat_incidents=threat_incidents
     )
 
 # ─── Audit Logs ───────────────────────────────────────────────────

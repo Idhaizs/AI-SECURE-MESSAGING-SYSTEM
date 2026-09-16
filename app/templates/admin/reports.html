@@ -1,42 +1,98 @@
 {% extends 'base.html' %}
-{% block title %}Security Reports & Analytics - Admin{% endblock %}
+{% block title %}Security Reports & Analytics - Admin Portal{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
-.reports-header-actions {
+.security-status-pill {
     display: flex;
     align-items: center;
-    gap: 10px;
-}
-.btn-export {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    background: #1A2B4C;
-    color: #FFFFFF;
-    border-radius: 6px;
-    font-size: 12.5px;
+    gap: 8px;
+    padding: 6px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+    border-radius: 20px;
+    font-size: 12px;
     font-weight: 600;
-    text-decoration: none;
-    border: none;
-    cursor: pointer;
-    transition: background 0.15s ease;
 }
-.btn-export:hover {
-    background: #253966;
-    color: #FFFFFF;
+.status-dot-green {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+    animation: pulseDot 2s infinite;
 }
-.threat-risk-badge {
-    padding: 3px 8px;
+@keyframes pulseDot {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.report-stat-card {
+    background: #ffffff;
     border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.report-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 12px -2px rgba(0,0,0,0.06);
+}
+.report-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+}
+.report-stat-card.red::before { background: #ef4444; }
+.report-stat-card.blue::before { background: #3b82f6; }
+.report-stat-card.orange::before { background: #f97316; }
+.report-stat-card.purple::before { background: #8b5cf6; }
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.stat-subtext {
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+.stat-subtext.red { background: #fee2e2; color: #991b1b; }
+.stat-subtext.blue { background: #dbeafe; color: #1e40af; }
+.stat-subtext.orange { background: #ffedd5; color: #9a3412; }
+.stat-subtext.purple { background: #f3e8ff; color: #6b21a8; }
+
+.doughnut-center-text {
+    position: absolute;
+    top: 44%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+.doughnut-center-text h4 {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1;
+}
+.doughnut-center-text p {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    margin-top: 4px;
     text-transform: uppercase;
 }
-.threat-risk-badge.critical { background: #fee2e2; color: #dc2626; }
-.threat-risk-badge.high { background: #fff7ed; color: #ea580c; }
-.threat-risk-badge.medium { background: #fefce8; color: #ca8a04; }
 </style>
 {% endblock %}
 
@@ -53,11 +109,12 @@
         {% include 'admin/_sidebar.html' %}
         <div class="admin-content">
             <div class="admin-topbar">
-                <h2><i class="fas fa-chart-column"></i> Security Reports & Analytics</h2>
-                <div class="reports-header-actions">
-                    <button class="btn-export" onclick="window.print()">
-                        <i class="fas fa-print"></i> Print / Export PDF
-                    </button>
+                <h2><i class="fas fa-chart-column"></i> Security Reports & Threat Analytics</h2>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div class="security-status-pill">
+                        <span class="status-dot-green"></span>
+                        <span>AI Threat Shield: Active</span>
+                    </div>
                     <div class="admin-user">
                         <i class="fas fa-user-shield"></i>
                         <span>{{ session.username }}</span>
@@ -66,31 +123,43 @@
             </div>
 
             <div class="page-content">
-                <!-- Overview Stats Grid -->
+                <!-- Executive Metric Grid -->
                 <div class="stats-grid" style="padding: 0 0 24px 0;">
-                    <div class="stat-card">
-                        <div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+                    <div class="report-stat-card red">
+                        <div class="stat-header">
+                            <div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+                            <span class="stat-subtext red">▲ Real-time AI Shield</span>
+                        </div>
                         <div class="stat-info">
                             <h3>{{ total_flagged }}</h3>
                             <p>Threats Flagged</p>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon blue"><i class="fas fa-file-shield"></i></div>
+                    <div class="report-stat-card blue">
+                        <div class="stat-header">
+                            <div class="stat-icon blue"><i class="fas fa-file-shield"></i></div>
+                            <span class="stat-subtext blue">100% Virus Scanning</span>
+                        </div>
                         <div class="stat-info">
                             <h3>{{ total_files }}</h3>
                             <p>Files Scanned</p>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon orange"><i class="fas fa-user-slash"></i></div>
+                    <div class="report-stat-card orange">
+                        <div class="stat-header">
+                            <div class="stat-icon orange"><i class="fas fa-user-slash"></i></div>
+                            <span class="stat-subtext orange">Auto-Suspended</span>
+                        </div>
                         <div class="stat-info">
                             <h3>{{ total_blocked }}</h3>
                             <p>Accounts Blocked</p>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon purple"><i class="fas fa-percent"></i></div>
+                    <div class="report-stat-card purple">
+                        <div class="stat-header">
+                            <div class="stat-icon purple"><i class="fas fa-percent"></i></div>
+                            <span class="stat-subtext purple">Flagged Ratio</span>
+                        </div>
                         <div class="stat-info">
                             <h3>{{ threat_rate }}%</h3>
                             <p>Threat Detection Rate</p>
@@ -98,12 +167,13 @@
                     </div>
                 </div>
 
-                <!-- Main Reports 2x2 Grid -->
+                <!-- Main Analytics 2x2 Grid -->
                 <div class="dashboard-grid" style="padding: 0;">
-                    <!-- Message & Threat Activity Chart -->
+                    <!-- Message & Threat Activity Bar Chart -->
                     <div class="dashboard-card">
                         <div class="card-header">
                             <h3><i class="fas fa-chart-line"></i> Message & Threat Activity (Last 7 Days)</h3>
+                            <span style="font-size: 11px; font-weight: 600; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 10px;">7 Days History</span>
                         </div>
                         <div class="card-body">
                             <div class="chart-wrapper" style="max-width: 100%; height: 260px;">
@@ -112,22 +182,28 @@
                         </div>
                     </div>
 
-                    <!-- Threat Type Breakdown Chart -->
+                    <!-- Threat Type Breakdown Doughnut Chart -->
                     <div class="dashboard-card">
                         <div class="card-header">
                             <h3><i class="fas fa-chart-pie"></i> Threat Type Breakdown</h3>
+                            <span style="font-size: 11px; font-weight: 600; color: #ef4444; background: #fee2e2; padding: 2px 8px; border-radius: 10px;">Distribution</span>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="position: relative;">
                             <div class="chart-wrapper">
                                 <canvas id="threatChart"></canvas>
+                                <div class="doughnut-center-text" id="doughnutCenter">
+                                    <h4>{{ total_flagged }}</h4>
+                                    <p>Threats</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- File Scan Results Chart -->
+                    <!-- File Scan Results Pie Chart -->
                     <div class="dashboard-card">
                         <div class="card-header">
                             <h3><i class="fas fa-shield-virus"></i> File Attachment Security Scan</h3>
+                            <span style="font-size: 11px; font-weight: 600; color: #10b981; background: #d1fae5; padding: 2px 8px; border-radius: 10px;">VirusTotal & Local Rules</span>
                         </div>
                         <div class="card-body">
                             <div class="chart-wrapper">
@@ -136,45 +212,48 @@
                         </div>
                     </div>
 
-                    <!-- Threat Statistics Summary Table -->
+                    <!-- Threat Incidents Intelligence Summary Table -->
                     <div class="dashboard-card">
                         <div class="card-header">
-                            <h3><i class="fas fa-table-list"></i> Threat Detection Summary</h3>
+                            <h3><i class="fas fa-shield-cat"></i> Threat Incident Intelligence Log</h3>
+                            <a href="{{ url_for('admin.suspicious') }}" class="btn-sm">View All History</a>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="padding: 12px 16px;">
                             <table class="data-table">
                                 <thead>
                                     <tr>
+                                        <th>Sender</th>
+                                        <th>Receiver</th>
                                         <th>Threat Type</th>
-                                        <th>Detections</th>
-                                        <th>Risk Level</th>
-                                        <th>Action Taken</th>
+                                        <th>Status</th>
+                                        <th>Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                {% for stat in threat_stats %}
+                                {% for inc in threat_incidents %}
                                 <tr>
+                                    <td><strong>{{ inc.sender }}</strong></td>
+                                    <td>{{ inc.receiver }}</td>
                                     <td>
-                                        <span class="threat-badge {{ stat.threat_type }}">
-                                            {{ stat.threat_type.replace('_',' ').title() }}
+                                        <span class="threat-badge {{ inc.threat_type }}">
+                                            {{ inc.threat_type.replace('_',' ').title() }}
                                         </span>
                                     </td>
-                                    <td><strong>{{ stat.count }}</strong></td>
                                     <td>
-                                        {% if stat.threat_type in ['malicious_file', 'suspicious_attachment'] %}
-                                        <span class="threat-risk-badge critical">CRITICAL</span>
+                                        {% if inc.sender_status == 'blocked' %}
+                                        <span class="status-badge blocked">Blocked</span>
                                         {% else %}
-                                        <span class="threat-risk-badge high">HIGH</span>
+                                        <span class="status-badge active">Active</span>
                                         {% endif %}
                                     </td>
-                                    <td><small style="color: #dc2626; font-weight: 600;">Auto-Block & Flagged</small></td>
+                                    <td><small style="color: #64748b;">{{ inc.sent_at.strftime('%d/%m %H:%M') if inc.sent_at else 'Just now' }}</small></td>
                                 </tr>
                                 {% endfor %}
-                                {% if not threat_stats %}
+                                {% if not threat_incidents %}
                                 <tr>
-                                    <td colspan="4" style="text-align:center; padding: 40px; color:#94a3b8">
-                                        <i class="fas fa-shield-check" style="font-size: 32px; display: block; margin-bottom: 8px;"></i>
-                                        No security threats recorded
+                                    <td colspan="5" style="text-align:center; padding: 40px; color:#94a3b8">
+                                        <i class="fas fa-shield-check" style="font-size: 32px; display: block; margin-bottom: 8px; color: #10b981;"></i>
+                                        No threat incidents detected
                                     </td>
                                 </tr>
                                 {% endif %}
@@ -196,7 +275,7 @@ const dailyData = {{ daily_stats | tojson }};
 const threatData = {{ threat_stats | tojson }};
 const fileData = {{ file_stats | tojson }};
 
-// Daily Activity Bar Chart
+// Daily Activity Bar Chart (Trimmed, modern bars)
 const dailyLabels = dailyData.map(d => d.date);
 new Chart(document.getElementById('dailyChart'), {
     type: 'bar',
@@ -206,14 +285,18 @@ new Chart(document.getElementById('dailyChart'), {
             { 
                 label: 'Total Messages', 
                 data: dailyData.map(d => d.total), 
-                backgroundColor: '#2563eb',
-                borderRadius: 4
+                backgroundColor: '#3b82f6',
+                borderRadius: 6,
+                maxBarThickness: 32,
+                categoryPercentage: 0.5
             },
             { 
                 label: 'Threat Messages', 
                 data: dailyData.map(d => d.suspicious), 
-                backgroundColor: '#dc2626',
-                borderRadius: 4
+                backgroundColor: '#ef4444',
+                borderRadius: 6,
+                maxBarThickness: 32,
+                categoryPercentage: 0.5
             }
         ]
     },
@@ -221,15 +304,16 @@ new Chart(document.getElementById('dailyChart'), {
         responsive: true, 
         maintainAspectRatio: false, 
         plugins: { 
-            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 12 } } } 
+            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 12, weight: '500' } } } 
         },
         scales: {
-            y: { beginAtZero: true, ticks: { precision: 0 } }
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(0,0,0,0.04)' } }
         }
     }
 });
 
-// Threat Type Breakdown Doughnut Chart
+// Threat Type Breakdown Doughnut Chart with Center Text
 if (threatData.length > 0) {
     new Chart(document.getElementById('threatChart'), {
         type: 'doughnut',
@@ -237,22 +321,25 @@ if (threatData.length > 0) {
             labels: threatData.map(t => t.threat_type.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase())),
             datasets: [{ 
                 data: threatData.map(t => t.count), 
-                backgroundColor: ['#ef4444','#f97316','#eab308','#3b82f6','#8b5cf6'] 
+                backgroundColor: ['#ef4444','#f97316','#eab308','#3b82f6','#8b5cf6'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
             }]
         },
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
-            cutout: '68%',
+            cutout: '72%',
             plugins: { 
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } 
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11, weight: '500' } } } 
             } 
         }
     });
 } else {
+    document.getElementById('doughnutCenter').style.display = 'none';
     document.getElementById('threatChart').closest('.dashboard-card').querySelector('.card-body').innerHTML = `
         <div class="empty-state" style="padding: 40px; text-align: center; color: #94a3b8;">
-            <i class="fas fa-check-circle" style="font-size: 32px; display: block; margin-bottom: 8px;"></i>
+            <i class="fas fa-check-circle" style="font-size: 32px; display: block; margin-bottom: 8px; color: #10b981;"></i>
             <p>No threat types detected</p>
         </div>
     `;
@@ -266,14 +353,16 @@ if (fileData.length > 0) {
             labels: fileData.map(f => f.scan_result ? f.scan_result.toUpperCase() : 'UNKNOWN'),
             datasets: [{ 
                 data: fileData.map(f => f.count), 
-                backgroundColor: ['#10b981','#ef4444','#f59e0b','#6b7280'] 
+                backgroundColor: ['#10b981','#ef4444','#f59e0b','#6b7280'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
             }]
         },
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
             plugins: { 
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } 
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11, weight: '500' } } } 
             } 
         }
     });
