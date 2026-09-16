@@ -359,12 +359,12 @@ def delete_user(user_id):
 def reports():
     # Message stats per day (last 7 days)
     raw_daily = query_db("""
-        SELECT DATE_FORMAT(sent_at, '%d %b') as date, 
+        SELECT DATE_FORMAT(sent_at, '%%d %%b') as date, 
                COUNT(*) as total,
                SUM(is_flagged) as suspicious
         FROM messages
         WHERE sent_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-        GROUP BY DATE_FORMAT(sent_at, '%d %b'), DATE(sent_at)
+        GROUP BY DATE_FORMAT(sent_at, '%%d %%b'), DATE(sent_at)
         ORDER BY DATE(sent_at) ASC
     """)
     
