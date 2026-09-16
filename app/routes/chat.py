@@ -198,25 +198,12 @@ def upload_file():
     if not file or file.filename == '':
         return jsonify({'success': False, 'error': 'No file selected'}), 400
     
-    if not allowed_file(file.filename):
-        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
-    
-    # Check max file size setting
-    size_setting = query_db("SELECT setting_value FROM system_settings WHERE setting_key = 'max_file_size_mb'", one=True)
-    max_mb = int(size_setting['setting_value']) if size_setting else 25
-    file.seek(0, os.SEEK_END)
-    file_size_bytes = file.tell()
-    file.seek(0)
-    
-    if file_size_bytes > max_mb * 1024 * 1024:
-        return jsonify({'success': False, 'error': f"File exceeds maximum allowed limit of {max_mb}MB"}), 400
-    
     sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
     receiver_info = query_db("SELECT username FROM users WHERE user_id = %s", (receiver_id,), one=True) if receiver_id else None
     sender_name = sender_info['username'] if sender_info else f"User {user_id}"
     receiver_name = receiver_info['username'] if receiver_info else "System"
-    
-    # Check extension
+
+    # Check extension threat first (e.g. .bat, .vbs, .exe, .cmd, .ps1)
     ext_check = check_file_extension(file.filename)
     if ext_check['is_suspicious']:
         query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
@@ -235,16 +222,35 @@ def upload_file():
             (user_id, user_id, receiver_id or 0, msg_id, file.filename, file.filename, file.filename), commit=True
         )
         
-        alert_detail = f"User '{sender_name}' was AUTO-BLOCKED attempting to upload suspicious file: '{file.filename}' (Extension: {ext_check['extension']})"
+        alert_detail = f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED attempting to upload suspicious file: '{file.filename}' (Extension: {ext_check['extension']})"
         query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, 'suspicious_attachment', %s, 'high')",
-            (msg_id, user_id, alert_detail), commit=True
+            "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (%s, %s, %s, 'suspicious_attachment', %s, 'high', 'unread')",
+            (msg_id, user_id, user_id, alert_detail), commit=True
         )
-        log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for attempting to upload blocked file: '{file.filename}'")
+        log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for attempting to upload blocked threat file: '{file.filename}'")
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
-        return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': f"Suspicious file type blocked: {ext_check['extension']}. Account automatically suspended due to security violation."}), 400
+        return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': f"🚫 Suspicious file type blocked: {ext_check['extension']}. Account automatically suspended due to security violation."}), 400
+
+    if not allowed_file(file.filename):
+        alert_detail = f"User '{sender_name}' attempted to upload unallowed file format: '{file.filename}'"
+        query_db(
+            "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (NULL, %s, %s, 'unallowed_file_type', %s, 'medium', 'unread')",
+            (user_id, user_id, alert_detail), commit=True
+        )
+        log_action(user_id, 'BLOCKED_FILE_UPLOAD', request.remote_addr, alert_detail)
+        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+    
+    # Check max file size setting
+    size_setting = query_db("SELECT setting_value FROM system_settings WHERE setting_key = 'max_file_size_mb'", one=True)
+    max_mb = int(size_setting['setting_value']) if size_setting else 25
+    file.seek(0, os.SEEK_END)
+    file_size_bytes = file.tell()
+    file.seek(0)
+    
+    if file_size_bytes > max_mb * 1024 * 1024:
+        return jsonify({'success': False, 'error': f"File exceeds maximum allowed limit of {max_mb}MB"}), 400
     
     # Save file
     filename = secure_filename(file.filename)
