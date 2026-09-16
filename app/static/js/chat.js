@@ -266,6 +266,13 @@ async function sendMessage() {
 
             socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
             updateContactPreview(currentReceiverId, content, msg.sent_at);
+        } else {
+            if (data.account_blocked || data.redirect) {
+                alert(data.error || '🚫 Your account has been suspended by Admin due to a security violation.');
+                window.location.href = data.redirect || '/login';
+                return;
+            }
+            alert('❌ ' + (data.error || 'Failed to send message'));
         }
     } catch (err) {
         console.error('Send error:', err);
@@ -410,6 +417,11 @@ async function confirmUploadFile() {
             socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
             updateContactPreview(currentReceiverId, `📎 ${data.file_name}`, msg.sent_at);
         } else {
+            if (data.account_blocked || data.redirect) {
+                alert(data.error || '🚫 Your account has been suspended by Admin due to a security violation.');
+                window.location.href = data.redirect || '/login';
+                return;
+            }
             alert('❌ ' + data.error);
         }
     } catch (err) {

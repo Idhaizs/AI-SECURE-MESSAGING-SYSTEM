@@ -17,6 +17,17 @@ def login_required(f):
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/chat/meetings') or request.path.startswith('/chat/send') or request.path.startswith('/chat/upload'):
                 return jsonify({'success': False, 'error': 'Session expired. Please log in again.', 'redirect': '/login'}), 401
             return redirect(url_for('auth.login'))
+        
+        # Check if user account status is blocked in database
+        u = query_db("SELECT status FROM users WHERE user_id = %s", (session['user_id'],), one=True)
+        if u and u.get('status') == 'blocked':
+            session.clear()
+            from flask import flash
+            flash('🚫 Your account has been suspended by Admin due to a security violation.', 'danger')
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/chat/meetings') or request.path.startswith('/chat/send') or request.path.startswith('/chat/upload'):
+                return jsonify({'success': False, 'error': '🚫 Your account has been suspended by Admin due to a security violation.', 'account_blocked': True, 'redirect': '/login'}), 401
+            return redirect(url_for('auth.login'))
+            
         return f(*args, **kwargs)
     return decorated
 
@@ -146,6 +157,15 @@ def send_message():
             (message_id, user_id, threat_type, scan_result['detail'], 'high'), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"Threat: {threat_type} - {scan_result['detail']}")
+        session.clear()
+        from flask import flash
+        flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
+        return jsonify({
+            'success': False,
+            'account_blocked': True,
+            'redirect': '/login',
+            'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by Admin."
+        })
     
     log_action(user_id, 'SEND_MESSAGE', request.remote_addr, f"To user: {receiver_id}")
     
@@ -193,7 +213,10 @@ def upload_file():
             (user_id, ext_check['detail']), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, ext_check['detail'])
-        return jsonify({'success': False, 'error': f"Suspicious file type blocked: {ext_check['extension']}. Account automatically suspended due to security violation."}), 400
+        session.clear()
+        from flask import flash
+        flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
+        return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': f"Suspicious file type blocked: {ext_check['extension']}. Account automatically suspended due to security violation."}), 400
     
     # Save file
     filename = secure_filename(file.filename)
@@ -224,7 +247,10 @@ def upload_file():
             (user_id,), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_MALICIOUS_FILE', request.remote_addr, 'VirusTotal detected malicious file')
-        return jsonify({'success': False, 'error': 'File blocked: detected as malicious by security scan. Account automatically suspended for security review.'}), 400
+        session.clear()
+        from flask import flash
+        flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
+        return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': 'File blocked: detected as malicious by security scan. Account automatically suspended for security review.'}), 400
     
     # Save message record
     encrypted_path = encrypt_message(file_path)
