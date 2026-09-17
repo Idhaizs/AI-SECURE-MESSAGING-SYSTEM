@@ -6,15 +6,21 @@ def register_socket_events(socketio):
     @socketio.on('connect')
     def on_connect():
         user_id = session.get('user_id')
+        role = session.get('role')
         if user_id:
             join_room(f'user_{user_id}')
-            emit('connected', {'user_id': user_id})
+            if role == 'admin':
+                join_room('admin_room')
+            emit('connected', {'user_id': user_id, 'role': role})
 
     @socketio.on('disconnect')
     def on_disconnect():
         user_id = session.get('user_id')
+        role = session.get('role')
         if user_id:
             leave_room(f'user_{user_id}')
+            if role == 'admin':
+                leave_room('admin_room')
 
     @socketio.on('send_message')
     def on_send_message(data):

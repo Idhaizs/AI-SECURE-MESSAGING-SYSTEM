@@ -164,6 +164,21 @@ def send_message():
             (message_id, user_id, threat_type, alert_detail, 'high'), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for sending {threat_type} to '{receiver_name}': \"{content[:100]}\"")
+        
+        try:
+            from app import socketio
+            socketio.emit('account_blocked', {
+                'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by System."
+            }, room=f'user_{user_id}')
+            socketio.emit('admin_threat_alert', {
+                'sender_name': sender_name,
+                'user_id': user_id,
+                'threat_type': threat_type,
+                'alert_detail': alert_detail
+            }, room='admin_room')
+        except Exception:
+            pass
+
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
@@ -228,6 +243,21 @@ def upload_file():
             (msg_id, user_id, user_id, alert_detail), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_FILE_THREAT', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for attempting to upload blocked threat file: '{file.filename}'")
+
+        try:
+            from app import socketio
+            socketio.emit('account_blocked', {
+                'error': f"🚫 Suspicious file type blocked: {ext_check['extension']}. Account automatically suspended due to security violation."
+            }, room=f'user_{user_id}')
+            socketio.emit('admin_threat_alert', {
+                'sender_name': sender_name,
+                'user_id': user_id,
+                'threat_type': 'suspicious_attachment',
+                'alert_detail': alert_detail
+            }, room='admin_room')
+        except Exception:
+            pass
+
         session.clear()
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')

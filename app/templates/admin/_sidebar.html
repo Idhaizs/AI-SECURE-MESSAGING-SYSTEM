@@ -28,8 +28,49 @@
     </a>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
 (function() {
+    function playSecurityAlertSound() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        } catch(e) {}
+    }
+
+    function showAdminToast(title, message) {
+        let container = document.getElementById('adminToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'adminToastContainer';
+            container.style.cssText = 'position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; pointer-events:none;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.style.cssText = 'background:#dc2626; color:#ffffff; padding:14px 18px; border-radius:10px; box-shadow:0 10px 25px rgba(220,38,38,0.4); font-size:13px; font-weight:600; display:flex; align-items:center; gap:12px; min-width:320px; pointer-events:auto; animation:slideInRight 0.3s ease;';
+        toast.innerHTML = `
+            <i class="fas fa-shield-cat" style="font-size:20px; color:#fef08a;"></i>
+            <div style="flex:1;">
+                <div style="font-weight:700; text-transform:uppercase; font-size:11px; color:#fef08a; letter-spacing:0.5px;">⚠️ THREAT DETECTED & AUTO-BLOCKED</div>
+                <div style="margin-top:2px;">${message}</div>
+            </div>
+            <button onclick="this.parentElement.remove()" style="background:none; border:none; color:white; font-size:18px; cursor:pointer; padding:0 4px;">&times;</button>
+        `;
+        container.appendChild(toast);
+        playSecurityAlertSound();
+        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
+    }
+
     let lastUnreadCount = null;
     async function checkAdminAlerts() {
         try {
@@ -47,15 +88,24 @@
                 }
                 
                 if (lastUnreadCount !== null && data.unread_count > lastUnreadCount && data.latest_alert) {
-                    const alertMsg = `🚨 THREAT DETECTED!\nUser: ${data.latest_alert.username || 'User'}\nThreat: ${data.latest_alert.threat_type}\nDetail: ${data.latest_alert.alert_detail || ''}`;
-                    if (typeof showAdminToast === 'function') {
-                        showAdminToast(alertMsg);
-                    }
+                    const msg = `User <strong>${data.latest_alert.username || 'User'}</strong> was auto-blocked (${data.latest_alert.threat_type || 'threat'})`;
+                    showAdminToast('THREAT DETECTED', msg);
                 }
                 lastUnreadCount = data.unread_count;
             }
         } catch (e) {}
     }
+
+    // Connect admin SocketIO room
+    try {
+        const socket = io();
+        socket.on('admin_threat_alert', function(data) {
+            const msg = `User <strong>${data.sender_name || 'User'}</strong> was auto-blocked (${data.threat_type || 'threat'})`;
+            showAdminToast('THREAT DETECTED', msg);
+            checkAdminAlerts();
+        });
+    } catch(e) {}
+
     setInterval(checkAdminAlerts, 3000);
     checkAdminAlerts();
 })();

@@ -119,7 +119,7 @@ def unread_alerts_api():
 @admin_required
 def suspicious():
     messages = query_db("""
-        SELECT m.id, m.message_id, m.threat_type, m.sent_at, m.is_flagged, m.encrypted_content, m.message_type,
+        SELECT m.id, m.message_id, m.sender_id, m.threat_type, m.sent_at, m.is_flagged, m.encrypted_content, m.message_type,
                s.username as sender, s.status as sender_status,
                COALESCE(r.username, 'System / Receiver') as receiver,
                f.file_name
