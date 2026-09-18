@@ -11,6 +11,7 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER = os.getenv('SMTP_USER', '')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 SENDER_EMAIL = os.getenv('SENDER_EMAIL', SMTP_USER or 'noreply@aisecuremessaging.com')
+BASE_URL = os.getenv('BASE_URL', 'https://aisecuremessaging.duckdns.org')
 
 def send_approval_email(recipient_email, full_name, user_id_str):
     """
@@ -51,7 +52,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
                 <p>Please keep this <strong>User ID</strong> safe. You will need to enter this ID when logging into the system.</p>
                 
                 <div style="text-align: center;">
-                    <a href="http://localhost:5000/login" class="btn">Login Now</a>
+                    <a href="{BASE_URL}/login" class="btn">Login Now</a>
                 </div>
             </div>
             <div class="footer">
