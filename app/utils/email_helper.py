@@ -4,19 +4,36 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
-load_dotenv()
+# Ensure .env is explicitly loaded from project root directory regardless of working directory
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+env_path = os.path.join(BASE_DIR, '.env')
+load_dotenv(env_path)
 
-SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-SMTP_USER = os.getenv('SMTP_USER', '')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
-SENDER_EMAIL = os.getenv('SENDER_EMAIL', SMTP_USER or 'noreply@aisecuremessaging.com')
-BASE_URL = os.getenv('BASE_URL', 'https://aisecuremessaging.duckdns.org')
+def get_smtp_config():
+    # Reload env in case it was modified
+    load_dotenv(env_path)
+    return {
+        'server': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
+        'port': int(os.getenv('SMTP_PORT', 587)),
+        'user': os.getenv('SMTP_USER', '').strip(),
+        'password': os.getenv('SMTP_PASSWORD', '').strip(),
+        'sender': os.getenv('SENDER_EMAIL', os.getenv('SMTP_USER', '') or 'noreply@aisecuremessaging.com').strip(),
+        'base_url': os.getenv('BASE_URL', 'https://aisecuremessaging.duckdns.org').strip()
+    }
 
 def send_approval_email(recipient_email, full_name, user_id_str):
     """
     Sends an approval email to the user with their assigned unique User ID.
+    Returns (success: bool, message: str)
     """
+    config = get_smtp_config()
+    smtp_user = config['user']
+    smtp_password = config['password']
+    smtp_server = config['server']
+    smtp_port = config['port']
+    sender_email = config['sender']
+    base_url = config['base_url']
+
     subject = "🎉 Account Approved - AI Secure Messaging System"
     body_html = f"""
     <!DOCTYPE html>
@@ -52,7 +69,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
                 <p>Please keep this <strong>User ID</strong> safe. You will need to enter this ID when logging into the system.</p>
                 
                 <div style="text-align: center;">
-                    <a href="{BASE_URL}/login" class="btn">Login Now</a>
+                    <a href="{base_url}/login" class="btn">Login Now</a>
                 </div>
             </div>
             <div class="footer">
@@ -63,34 +80,56 @@ def send_approval_email(recipient_email, full_name, user_id_str):
     </html>
     """
 
-    if SMTP_USER and SMTP_PASSWORD:
+    if smtp_user and smtp_password:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(body_html, "html"))
+
+        # Attempt 1: Port 587 (TLS)
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = SENDER_EMAIL
-            msg["To"] = recipient_email
-            msg.attach(MIMEText(body_html, "html"))
-
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
                 server.starttls()
-                server.login(SMTP_USER, SMTP_PASSWORD)
-                server.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
-            print(f"--> REAL Email successfully sent to {recipient_email} via SMTP!")
-            return True
-        except Exception as e:
-            print(f"--> Error sending real email via SMTP: {e}")
+                server.login(smtp_user, smtp_password)
+                server.sendmail(sender_email, recipient_email, msg.as_string())
+            print(f"--> REAL Email successfully sent to {recipient_email} via SMTP (Port {smtp_port})!")
+            return True, "Email sent successfully via SMTP Port 587"
+        except Exception as e1:
+            print(f"--> SMTP Port {smtp_port} failed: {e1}. Trying Port 465 (SSL) fallback...")
 
+        # Attempt 2: Port 465 (SSL fallback)
+        try:
+            with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
+                server.login(smtp_user, smtp_password)
+                server.sendmail(sender_email, recipient_email, msg.as_string())
+            print(f"--> REAL Email successfully sent to {recipient_email} via SMTP SSL (Port 465)!")
+            return True, "Email sent successfully via SMTP SSL Port 465"
+        except Exception as e2:
+            error_details = f"Port 587: {e1} | Port 465: {e2}"
+            print(f"--> Error sending email via SMTP: {error_details}")
+            return False, error_details
+
+    mock_msg = f"SMTP_USER or SMTP_PASSWORD missing in .env (env_path: {env_path})"
     print(f"==================================================")
     print(f"[EMAIL] [MOCK EMAIL SENT TO: {recipient_email}]")
     print(f"Subject: {subject}")
     print(f"Assigned User ID: {user_id_str}")
+    print(f"Reason: {mock_msg}")
     print(f"==================================================")
-    return True
+    return False, mock_msg
 
 def send_rejection_email(recipient_email, full_name):
     """
     Sends a rejection email to the user if Admin rejects registration.
     """
+    config = get_smtp_config()
+    smtp_user = config['user']
+    smtp_password = config['password']
+    smtp_server = config['server']
+    smtp_port = config['port']
+    sender_email = config['sender']
+
     subject = "Registration Request Status - AI Secure Messaging System"
     body_html = f"""
     <!DOCTYPE html>
@@ -103,20 +142,26 @@ def send_rejection_email(recipient_email, full_name):
     </body>
     </html>
     """
-    if SMTP_USER and SMTP_PASSWORD:
+    if smtp_user and smtp_password:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(body_html, "html"))
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = SENDER_EMAIL
-            msg["To"] = recipient_email
-            msg.attach(MIMEText(body_html, "html"))
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
                 server.starttls()
-                server.login(SMTP_USER, SMTP_PASSWORD)
-                server.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
-            return True
-        except Exception as e:
-            print(f"--> Error sending email: {e}")
+                server.login(smtp_user, smtp_password)
+                server.sendmail(sender_email, recipient_email, msg.as_string())
+            return True, "Rejection email sent"
+        except Exception:
+            try:
+                with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
+                    server.login(smtp_user, smtp_password)
+                    server.sendmail(sender_email, recipient_email, msg.as_string())
+                return True, "Rejection email sent via SSL"
+            except Exception as e:
+                return False, str(e)
 
-    print(f"[EMAIL] [MOCK REJECTION EMAIL SENT TO: {recipient_email}]")
-    return True
+    return False, "SMTP_USER/SMTP_PASSWORD missing"
+

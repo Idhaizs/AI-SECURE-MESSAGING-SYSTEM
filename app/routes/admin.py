@@ -273,10 +273,30 @@ def approve_user(user_id):
     query_db("UPDATE users SET status = 'active', user_id_str = %s, user_id = %s WHERE id = %s", (assigned_id, actual_id, actual_id), commit=True)
     
     from app.utils.email_helper import send_approval_email
-    send_approval_email(user['email'], user['full_name'] or user['username'], assigned_id)
+    email_sent, email_msg = send_approval_email(user['email'], user['full_name'] or user['username'], assigned_id)
     
-    log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}")
-    return jsonify({'success': True, 'assigned_id': assigned_id})
+    log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}, Email status: {email_msg}")
+    return jsonify({'success': True, 'assigned_id': assigned_id, 'email_sent': email_sent, 'email_msg': email_msg})
+
+# ─── SMTP Diagnostic Test Route ────────────────────────────────────
+@admin_bp.route('/admin/test-email')
+@admin_required
+def test_email():
+    from app.utils.email_helper import send_approval_email, get_smtp_config
+    config = get_smtp_config()
+    current_user = query_db("SELECT email, full_name, username FROM users WHERE id = %s", (session['user_id'],), one=True)
+    target_email = current_user['email'] if current_user and current_user.get('email') else config['sender']
+    
+    email_sent, email_msg = send_approval_email(target_email, "System Admin", "SFC-9999")
+    return jsonify({
+        'email_sent': email_sent,
+        'email_msg': email_msg,
+        'target_email': target_email,
+        'smtp_server': config['server'],
+        'smtp_port': config['port'],
+        'smtp_user_configured': bool(config['user']),
+        'smtp_password_configured': bool(config['password'])
+    })
 
 # ─── Reject User Registration ──────────────────────────────────────
 @admin_bp.route('/admin/users/<int:user_id>/reject', methods=['POST'])
