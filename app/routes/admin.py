@@ -264,19 +264,35 @@ def users():
 @admin_bp.route('/admin/users/<int:user_id>/approve', methods=['POST'])
 @admin_required
 def approve_user(user_id):
-    user = query_db("SELECT * FROM users WHERE id = %s OR user_id = %s", (user_id, user_id), one=True)
-    if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
+    try:
+        user = query_db("SELECT * FROM users WHERE id = %s OR user_id = %s", (user_id, user_id), one=True)
+        if not user:
+            return jsonify({'success': False, 'error': f'User ID {user_id} not found'}), 404
+            
+        actual_id = user['id']
+        assigned_id = f"SFC-{1000 + actual_id}"
+        query_db("UPDATE users SET status = 'active', user_id_str = %s, user_id = %s WHERE id = %s", (assigned_id, actual_id, actual_id), commit=True)
         
-    actual_id = user['id']
-    assigned_id = f"SFC-{1000 + actual_id}"
-    query_db("UPDATE users SET status = 'active', user_id_str = %s, user_id = %s WHERE id = %s", (assigned_id, actual_id, actual_id), commit=True)
-    
-    from app.utils.email_helper import send_approval_email
-    email_sent, email_msg = send_approval_email(user['email'], user['full_name'] or user['username'], assigned_id)
-    
-    log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}, Email status: {email_msg}")
-    return jsonify({'success': True, 'assigned_id': assigned_id, 'email_sent': email_sent, 'email_msg': email_msg})
+        email_sent = False
+        email_msg = "Not attempted"
+        try:
+            from app.utils.email_helper import send_approval_email
+            target_email = user.get('email') or 'noreply@aisecuremessaging.com'
+            name = user.get('full_name') or user.get('username') or 'Valued User'
+            email_sent, email_msg = send_approval_email(target_email, name, assigned_id)
+        except Exception as e_email:
+            email_msg = f"Email exception: {str(e_email)}"
+            
+        try:
+            log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}, Email status: {email_msg}")
+        except Exception:
+            pass
+            
+        return jsonify({'success': True, 'assigned_id': assigned_id, 'email_sent': email_sent, 'email_msg': email_msg})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f"Database/Server Error: {str(e)}"}), 500
 
 # ─── SMTP Diagnostic Test Route ────────────────────────────────────
 @admin_bp.route('/admin/test-email')
