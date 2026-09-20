@@ -34,7 +34,14 @@
                             {% for user in users %}
                             <tr id="user-row-{{ user.id }}">
                                 <td><strong>{{ user.username }}</strong><br><small style="color:#64748b">{{ user.full_name or '' }}</small></td>
-                                <td><code id="user-id-str-{{ user.id }}" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-weight:bold;color:#1d4ed8;">{{ user.user_id_str or 'Pending...' }}</code></td>
+                                <td>
+                                    <code id="user-id-str-{{ user.id }}" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-weight:bold;color:#1d4ed8;">{{ user.user_id_str or 'Pending...' }}</code>
+                                    {% if user.user_id_str %}
+                                    <button onclick="copyUserId('{{ user.user_id_str }}')" style="background:none;border:none;color:#64748b;cursor:pointer;padding:2px 4px;font-size:12px;" title="Copy User ID">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                    {% endif %}
+                                </td>
                                 <td>{{ user.email }}</td>
                                 <td><span class="threat-badge {{ user.role }}">{{ user.role.title() }}</span></td>
                                 <td><span class="status-badge {{ user.status }}" id="status-{{ user.id }}">{{ user.status.title() }}</span></td>
@@ -227,6 +234,11 @@ async function deleteUser(userId) {
     } catch (err) {
         alert('Failed to delete user');
     }
+}
+
+function copyUserId(str) {
+    navigator.clipboard.writeText(str);
+    alert(`Copied User ID: ${str}`);
 }
 </script>
 </div>

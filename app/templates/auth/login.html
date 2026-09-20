@@ -26,12 +26,38 @@
                 Login
             </button>
         </form>
-        <div class="auth-links">
-            <a href="{{ url_for('auth.forgot_password') }}">Forgot Password?</a>
-            <span>|</span>
-            <a href="{{ url_for('auth.register') }}">Register</a>
-            <span>|</span>
-            <a href="{{ url_for('auth.index') }}">Back</a>
+        <div class="auth-links" style="flex-direction:column;gap:8px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;">
+                <a href="{{ url_for('auth.forgot_password') }}">Forgot Password?</a>
+                <span>|</span>
+                <a href="{{ url_for('auth.register') }}">Register</a>
+                <span>|</span>
+                <a href="{{ url_for('auth.index') }}">Back</a>
+            </div>
+            <div style="margin-top:6px;">
+                <a href="#" onclick="openStatusModal(); return false;" style="color:#1d4ed8;font-weight:bold;font-size:13px;display:inline-flex;align-items:center;gap:5px;background:#eff6ff;padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;">
+                    <i class="fas fa-search"></i> Check Registration Status / Find User ID
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Check Status -->
+<div class="modal-overlay" id="statusModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:white;width:90%;max-width:440px;border-radius:12px;padding:24px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:18px;color:#1e293b;"><i class="fas fa-id-card" style="color:#1d4ed8;"></i> Check Status & Find User ID</h3>
+            <button onclick="closeStatusModal()" style="background:none;border:none;font-size:18px;color:#94a3b8;cursor:pointer;"><i class="fas fa-times"></i></button>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:bold;color:#475569;margin-bottom:6px;">Username or Email Address</label>
+            <input type="text" id="statusIdentifier" placeholder="e.g. ahmad or ahmad@example.com" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div id="statusResult" style="display:none;padding:12px;border-radius:8px;font-size:13px;margin-bottom:16px;white-space:pre-line;line-height:1.5;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="closeStatusModal()" class="btn" style="background:#f1f5f9;color:#475569;padding:8px 16px;border:none;border-radius:6px;cursor:pointer;">Close</button>
+            <button onclick="submitCheckStatus()" class="btn btn-primary" style="padding:8px 18px;border-radius:6px;cursor:pointer;">Check Status</button>
         </div>
     </div>
 </div>
@@ -48,6 +74,57 @@ function togglePasswordVisibility(inputId, eyeId) {
         input.type = 'password';
         eye.classList.remove('fa-eye');
         eye.classList.add('fa-eye-slash');
+    }
+}
+
+function openStatusModal() {
+    document.getElementById('statusModal').style.display = 'flex';
+    document.getElementById('statusResult').style.display = 'none';
+    document.getElementById('statusIdentifier').value = '';
+}
+
+function closeStatusModal() {
+    document.getElementById('statusModal').style.display = 'none';
+}
+
+async function submitCheckStatus() {
+    const val = document.getElementById('statusIdentifier').value.trim();
+    const resultDiv = document.getElementById('statusResult');
+    if (!val) {
+        alert('Please enter your username or email address.');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('identifier', val);
+        const res = await fetch("{{ url_for('auth.check_status') }}", { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        resultDiv.style.display = 'block';
+        if (data.success) {
+            if (data.status === 'active') {
+                resultDiv.style.background = '#d1fae5';
+                resultDiv.style.color = '#065f46';
+                resultDiv.style.border = '1px solid #a7f3d0';
+            } else if (data.status === 'pending') {
+                resultDiv.style.background = '#fef3c7';
+                resultDiv.style.color = '#92400e';
+                resultDiv.style.border = '1px solid #fde68a';
+            } else {
+                resultDiv.style.background = '#fee2e2';
+                resultDiv.style.color = '#991b1b';
+                resultDiv.style.border = '1px solid #fca5a5';
+            }
+            resultDiv.innerText = data.message;
+        } else {
+            resultDiv.style.background = '#fee2e2';
+            resultDiv.style.color = '#991b1b';
+            resultDiv.style.border = '1px solid #fca5a5';
+            resultDiv.innerText = '❌ ' + (data.error || 'User not found.');
+        }
+    } catch (err) {
+        alert('Error checking status: ' + err.message);
     }
 }
 </script>

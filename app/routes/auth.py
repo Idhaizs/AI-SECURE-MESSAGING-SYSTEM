@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_bcrypt import Bcrypt
 from app.utils.db import query_db
 from app.utils.encryption import hash_answer, verify_answer
@@ -286,3 +286,36 @@ def logout():
     log_action(user_id, 'LOGOUT', request.remote_addr, 'User logged out')
     session.clear()
     return redirect(url_for('auth.index'))
+
+# ─── Check Registration Status & Lookup User ID ────────────────────
+@auth_bp.route('/check-status', methods=['POST'])
+def check_status():
+    identifier = request.form.get('identifier', '').strip()
+    if not identifier:
+        return jsonify({'success': False, 'error': 'Please enter your username or email address.'}), 400
+        
+    user = query_db("SELECT username, full_name, email, status, user_id_str FROM users WHERE (username = %s OR email = %s OR user_id_str = %s) AND role = 'user'", (identifier, identifier, identifier), one=True)
+    if not user:
+        return jsonify({'success': False, 'error': 'No registration record found for this username or email.'}), 404
+        
+    status = user['status']
+    user_id_str = user['user_id_str'] or 'Pending...'
+    full_name = user['full_name'] or user['username']
+    
+    if status == 'pending':
+        msg = f"⏳ Status: PENDING APPROVAL\nHello {full_name}, your registration request is currently pending Admin approval. Please check back soon."
+    elif status == 'active':
+        msg = f"🎉 Status: APPROVED!\nHello {full_name}, your account is APPROVED!\nOfficial User ID: {user_id_str}\n\nYou can log in using this User ID: {user_id_str}"
+    elif status == 'rejected':
+        msg = f"❌ Status: REJECTED\nYour registration request was rejected by the Administrator."
+    elif status == 'blocked':
+        msg = f"🚫 Status: BLOCKED\nYour account is currently blocked by the Administrator."
+    else:
+        msg = f"Status: {status.title()}"
+        
+    return jsonify({
+        'success': True,
+        'status': status,
+        'user_id_str': user_id_str,
+        'message': msg
+    })
