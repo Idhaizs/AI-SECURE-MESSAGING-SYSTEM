@@ -126,6 +126,11 @@ async function approveUser(userId) {
             alert(`Server Error (${res.status}): ${text.substring(0, 150)}`);
             return;
         }
+        if (data.redirect && !data.success) {
+            alert('❌ ' + (data.error || 'Session expired. Please log in again as Admin.'));
+            window.location.href = data.redirect;
+            return;
+        }
         if (data.success) {
             let msg = `🎉 User Approved! Assigned User ID: ${data.assigned_id}.`;
             if (data.email_sent) {
