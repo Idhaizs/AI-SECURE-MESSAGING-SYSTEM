@@ -21,6 +21,49 @@ def get_smtp_config():
         'base_url': os.getenv('BASE_URL', 'https://aisecuremessaging.duckdns.org').strip()
     }
 
+def send_email_via_resend(recipient_email, subject, body_html):
+    resend_api_key = os.getenv('RESEND_API_KEY', '').strip()
+    if not resend_api_key:
+        return False, "RESEND_API_KEY not set in .env"
+    
+    sender_email = os.getenv('RESEND_SENDER_EMAIL', 'onboarding@resend.dev').strip()
+    
+    import urllib.request
+    import urllib.error
+    import json
+    
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {resend_api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "AISecureMessaging/1.0"
+    }
+    payload = {
+        "from": f"AI Secure Messaging System <{sender_email}>",
+        "to": [recipient_email],
+        "subject": subject,
+        "html": body_html
+    }
+    
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_body = response.read().decode('utf-8')
+            res_json = json.loads(res_body)
+            email_id = res_json.get('id', 'unknown')
+            print(f"--> REAL Email successfully sent to {recipient_email} via Resend API (ID: {email_id})!")
+            return True, f"Email sent via Resend API (ID: {email_id})"
+    except urllib.error.HTTPError as e_http:
+        try:
+            err_text = e_http.read().decode('utf-8')
+        except Exception:
+            err_text = str(e_http)
+        print(f"--> Resend HTTP Error {e_http.code}: {err_text}")
+        return False, f"Resend API Error ({e_http.code}): {err_text}"
+    except Exception as e:
+        print(f"--> Resend Exception: {e}")
+        return False, f"Resend Error: {str(e)}"
+
 def send_approval_email(recipient_email, full_name, user_id_str):
     """
     Sends an approval email to the user with their assigned unique User ID.
@@ -80,6 +123,13 @@ def send_approval_email(recipient_email, full_name, user_id_str):
     </html>
     """
 
+    # If RESEND_API_KEY is configured, prioritize Resend API (bypasses port blocks)
+    if os.getenv('RESEND_API_KEY', '').strip():
+        ok, msg_resend = send_email_via_resend(recipient_email, subject, body_html)
+        if ok:
+            return ok, msg_resend
+        print(f"--> Resend API failed ({msg_resend}), falling back to SMTP...")
+
     if smtp_user and smtp_password:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -112,7 +162,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
             print(f"--> Error sending email via SMTP: {error_details}")
             return False, error_details
 
-    mock_msg = f"SMTP_USER or SMTP_PASSWORD missing in .env (env_path: {env_path})"
+    mock_msg = f"RESEND_API_KEY and SMTP_USER missing in .env (env_path: {env_path})"
     print(f"==================================================")
     print(f"[EMAIL] [MOCK EMAIL SENT TO: {recipient_email}]")
     print(f"Subject: {subject}")
@@ -144,6 +194,12 @@ def send_rejection_email(recipient_email, full_name):
     </body>
     </html>
     """
+
+    if os.getenv('RESEND_API_KEY', '').strip():
+        ok, msg_resend = send_email_via_resend(recipient_email, subject, body_html)
+        if ok:
+            return ok, msg_resend
+
     if smtp_user and smtp_password:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
