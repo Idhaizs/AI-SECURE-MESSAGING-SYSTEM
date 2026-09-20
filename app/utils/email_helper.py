@@ -83,7 +83,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
     if smtp_user and smtp_password:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = sender_email
+        msg["From"] = f"AI Secure Messaging System <{sender_email}>"
         msg["To"] = recipient_email
         msg.attach(MIMEText(body_html, "html"))
 
@@ -145,7 +145,7 @@ def send_rejection_email(recipient_email, full_name):
     if smtp_user and smtp_password:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = sender_email
+        msg["From"] = f"AI Secure Messaging System <{sender_email}>"
         msg["To"] = recipient_email
         msg.attach(MIMEText(body_html, "html"))
         try:
