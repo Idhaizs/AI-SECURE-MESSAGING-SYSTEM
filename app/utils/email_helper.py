@@ -87,6 +87,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
         msg["To"] = recipient_email
         msg.attach(MIMEText(body_html, "html"))
 
+        e1_err = None
         # Attempt 1: Port 587 (TLS)
         try:
             with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
@@ -96,7 +97,8 @@ def send_approval_email(recipient_email, full_name, user_id_str):
             print(f"--> REAL Email successfully sent to {recipient_email} via SMTP (Port {smtp_port})!")
             return True, "Email sent successfully via SMTP Port 587"
         except Exception as e1:
-            print(f"--> SMTP Port {smtp_port} failed: {e1}. Trying Port 465 (SSL) fallback...")
+            e1_err = str(e1)
+            print(f"--> SMTP Port {smtp_port} failed: {e1_err}. Trying Port 465 (SSL) fallback...")
 
         # Attempt 2: Port 465 (SSL fallback)
         try:
@@ -106,7 +108,7 @@ def send_approval_email(recipient_email, full_name, user_id_str):
             print(f"--> REAL Email successfully sent to {recipient_email} via SMTP SSL (Port 465)!")
             return True, "Email sent successfully via SMTP SSL Port 465"
         except Exception as e2:
-            error_details = f"Port 587: {e1} | Port 465: {e2}"
+            error_details = f"Port 587: {e1_err} | Port 465: {e2}"
             print(f"--> Error sending email via SMTP: {error_details}")
             return False, error_details
 
