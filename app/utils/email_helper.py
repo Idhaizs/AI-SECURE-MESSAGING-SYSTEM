@@ -123,12 +123,15 @@ def send_approval_email(recipient_email, full_name, user_id_str):
     </html>
     """
 
+    resend_attempted = False
+    resend_msg = ""
     # If RESEND_API_KEY is configured, prioritize Resend API (bypasses port blocks)
     if os.getenv('RESEND_API_KEY', '').strip():
-        ok, msg_resend = send_email_via_resend(recipient_email, subject, body_html)
+        resend_attempted = True
+        ok, resend_msg = send_email_via_resend(recipient_email, subject, body_html)
         if ok:
-            return ok, msg_resend
-        print(f"--> Resend API failed ({msg_resend}), falling back to SMTP...")
+            return ok, resend_msg
+        print(f"--> Resend API failed ({resend_msg}), falling back to SMTP...")
 
     if smtp_user and smtp_password:
         msg = MIMEMultipart("alternative")
@@ -159,7 +162,9 @@ def send_approval_email(recipient_email, full_name, user_id_str):
             return True, "Email sent successfully via SMTP SSL Port 465"
         except Exception as e2:
             error_details = f"Port 587: {e1_err} | Port 465: {e2}"
-            print(f"--> Error sending email via SMTP: {error_details}")
+            if resend_attempted:
+                error_details = f"Resend API: {resend_msg} | SMTP: {error_details}"
+            print(f"--> Error sending email: {error_details}")
             return False, error_details
 
     mock_msg = f"RESEND_API_KEY and SMTP_USER missing in .env (env_path: {env_path})"
