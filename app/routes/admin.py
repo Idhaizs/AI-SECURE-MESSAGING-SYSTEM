@@ -286,11 +286,11 @@ def approve_user(user_id):
             email_msg = f"Email exception: {str(e_email)}"
             
         try:
-            log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}, Email status: {email_msg}")
+            log_action(session['user_id'], 'APPROVE_USER', request.remote_addr, f"Approved user ID: {actual_id}, Assigned User ID: {assigned_id}")
         except Exception:
             pass
             
-        return jsonify({'success': True, 'assigned_id': assigned_id, 'email_sent': email_sent, 'email_msg': email_msg})
+        return jsonify({'success': True, 'assigned_id': assigned_id})
     except Exception as e:
         import traceback
         traceback.print_exc()
