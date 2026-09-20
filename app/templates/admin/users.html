@@ -32,30 +32,30 @@
                         </thead>
                         <tbody>
                             {% for user in users %}
-                            <tr id="user-row-{{ user.user_id }}">
+                            <tr id="user-row-{{ user.id }}">
                                 <td><strong>{{ user.username }}</strong><br><small style="color:#64748b">{{ user.full_name or '' }}</small></td>
-                                <td><code id="user-id-str-{{ user.user_id }}" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-weight:bold;color:#1d4ed8;">{{ user.user_id_str or 'Pending...' }}</code></td>
+                                <td><code id="user-id-str-{{ user.id }}" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-weight:bold;color:#1d4ed8;">{{ user.user_id_str or 'Pending...' }}</code></td>
                                 <td>{{ user.email }}</td>
                                 <td><span class="threat-badge {{ user.role }}">{{ user.role.title() }}</span></td>
-                                <td><span class="status-badge {{ user.status }}" id="status-{{ user.user_id }}">{{ user.status.title() }}</span></td>
+                                <td><span class="status-badge {{ user.status }}" id="status-{{ user.id }}">{{ user.status.title() }}</span></td>
                                 <td>{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '-' }}</td>
                                 <td style="display:flex;gap:6px;align-items:center;">
                                     {% if user.role != 'admin' %}
                                         {% if user.status == 'pending' %}
-                                        <button class="btn-sm" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:bold;" onclick="approveUser({{ user.user_id }})">
+                                        <button class="btn-sm" style="background:#10b981;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:bold;" onclick="approveUser({{ user.id }})">
                                             <i class="fas fa-check"></i> Approve
                                         </button>
-                                        <button class="btn-sm" style="background:#f43f5e;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:bold;" onclick="rejectUser({{ user.user_id }})">
+                                        <button class="btn-sm" style="background:#f43f5e;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:bold;" onclick="rejectUser({{ user.id }})">
                                             <i class="fas fa-times"></i> Reject
                                         </button>
                                         {% else %}
                                         <button class="toggle-btn {{ 'block' if user.status == 'active' else 'unblock' }}"
-                                            id="toggle-{{ user.user_id }}"
-                                            onclick="toggleUser({{ user.user_id }})">
+                                            id="toggle-{{ user.id }}"
+                                            onclick="toggleUser({{ user.id }})">
                                             {{ 'Block' if user.status == 'active' else 'Unblock' }}
                                         </button>
                                         {% endif %}
-                                    <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;" onclick="deleteUser({{ user.user_id }})" title="Delete User">
+                                    <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;" onclick="deleteUser({{ user.id }})" title="Delete User">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                     {% else %}
@@ -120,13 +120,19 @@ async function approveUser(userId) {
         const res = await fetch(`/admin/users/${userId}/approve`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-            alert(`🎉 User Approved! Assigned User ID: ${data.assigned_id}. Notification email sent.`);
+            let msg = `🎉 User Approved! Assigned User ID: ${data.assigned_id}.`;
+            if (data.email_sent) {
+                msg += ` Notification email sent to user.`;
+            } else {
+                msg += ` (Note: ${data.email_msg || 'Email delivery notice'})`;
+            }
+            alert(msg);
             location.reload();
         } else {
             alert('❌ ' + (data.error || 'Failed to approve user'));
         }
     } catch (err) {
-        alert('Error approving user');
+        alert('Error approving user: ' + err.message);
     }
 }
 
