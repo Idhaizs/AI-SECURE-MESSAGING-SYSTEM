@@ -287,35 +287,60 @@ def logout():
     session.clear()
     return redirect(url_for('auth.index'))
 
-# ─── Check Registration Status & Lookup User ID ────────────────────
+# ─── Check Registration Status & Lookup User ID (2-Step Security Verification) ───
 @auth_bp.route('/check-status', methods=['POST'])
 def check_status():
+    step = request.form.get('step', '1').strip()
     identifier = request.form.get('identifier', '').strip()
+    
     if not identifier:
         return jsonify({'success': False, 'error': 'Please enter your username or email address.'}), 400
         
-    user = query_db("SELECT username, full_name, email, status, user_id_str FROM users WHERE (username = %s OR email = %s OR user_id_str = %s) AND role = 'user'", (identifier, identifier, identifier), one=True)
+    user = query_db("SELECT id, user_id, username, full_name, email, status, security_question, security_answer_hash, user_id_str FROM users WHERE (username = %s OR email = %s OR user_id_str = %s) AND role = 'user'", (identifier, identifier, identifier), one=True)
     if not user:
         return jsonify({'success': False, 'error': 'No registration record found for this username or email.'}), 404
         
-    status = user['status']
-    user_id_str = user['user_id_str'] or 'Pending...'
-    full_name = user['full_name'] or user['username']
-    
-    if status == 'pending':
-        msg = f"⏳ Status: PENDING APPROVAL\nHello {full_name}, your registration request is currently pending Admin approval. Please check back soon."
-    elif status == 'active':
-        msg = f"🎉 Status: APPROVED!\nHello {full_name}, your account is APPROVED!\nOfficial User ID: {user_id_str}\n\nYou can log in using this User ID: {user_id_str}"
-    elif status == 'rejected':
-        msg = f"❌ Status: REJECTED\nYour registration request was rejected by the Administrator."
-    elif status == 'blocked':
-        msg = f"🚫 Status: BLOCKED\nYour account is currently blocked by the Administrator."
-    else:
-        msg = f"Status: {status.title()}"
+    # Step 1: Prompt Security Question
+    if step == '1':
+        question = user['security_question'] or "What is your security question answer?"
+        return jsonify({
+            'success': True,
+            'step': 1,
+            'username': user['username'],
+            'full_name': user['full_name'] or user['username'],
+            'question': question
+        })
         
-    return jsonify({
-        'success': True,
-        'status': status,
-        'user_id_str': user_id_str,
-        'message': msg
-    })
+    # Step 2: Verify Answer and Reveal Status & User ID
+    elif step == '2':
+        answer = request.form.get('answer', '').strip()
+        if not answer:
+            return jsonify({'success': False, 'error': 'Please answer your security question.'}), 400
+            
+        if not verify_answer(answer, user['security_answer_hash']):
+            return jsonify({'success': False, 'error': '❌ Incorrect Security Answer. Please try again.'}), 400
+            
+        status = user['status']
+        user_id_str = user['user_id_str'] or 'Pending...'
+        full_name = user['full_name'] or user['username']
+        
+        if status == 'pending':
+            msg = f"⏳ Status: PENDING APPROVAL\nHello {full_name}, your registration request is currently pending Admin approval. Please check back later."
+        elif status == 'active':
+            msg = f"🎉 Status: APPROVED!\nHello {full_name}, your account is APPROVED!\nOfficial User ID: {user_id_str}\n\nYou can log in now using this User ID: {user_id_str}"
+        elif status == 'rejected':
+            msg = f"❌ Status: REJECTED\nYour registration request was rejected by the Administrator."
+        elif status == 'blocked':
+            msg = f"🚫 Status: BLOCKED\nYour account is currently blocked by the Administrator."
+        else:
+            msg = f"Status: {status.title()}"
+            
+        return jsonify({
+            'success': True,
+            'step': 2,
+            'status': status,
+            'user_id_str': user_id_str,
+            'message': msg
+        })
+        
+    return jsonify({'success': False, 'error': 'Invalid request step.'}), 400
