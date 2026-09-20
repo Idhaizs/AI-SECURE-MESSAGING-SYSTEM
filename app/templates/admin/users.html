@@ -122,7 +122,7 @@
 {% block extra_js %}
 <script>
 async function approveUser(userId) {
-    if (!confirm('Approve this user registration request? An official User ID will be assigned and emailed to the user.')) return;
+    if (!confirm('Approve this user registration request? An official User ID will be assigned.')) return;
     try {
         const res = await fetch(`/admin/users/${userId}/approve`, { method: 'POST' });
         const text = await res.text();
@@ -139,13 +139,7 @@ async function approveUser(userId) {
             return;
         }
         if (data.success) {
-            let msg = `🎉 User Approved! Assigned User ID: ${data.assigned_id}.`;
-            if (data.email_sent) {
-                msg += ` Notification email sent to user.`;
-            } else {
-                msg += ` (Note: ${data.email_msg || 'Email delivery notice'})`;
-            }
-            alert(msg);
+            alert(`🎉 User Approved! Assigned User ID: ${data.assigned_id}.`);
             location.reload();
         } else {
             alert('❌ ' + (data.error || 'Failed to approve user'));

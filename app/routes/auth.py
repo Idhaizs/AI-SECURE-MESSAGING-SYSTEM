@@ -51,7 +51,7 @@ def login():
         
         if user:
             if user['status'] == 'pending':
-                flash('⚠️ Your account registration is pending Admin approval. Please check your email for your official User ID once approved.', 'warning')
+                flash('⚠️ Your account registration is pending Admin approval. You can check your status and find your User ID using "Check Registration Status" on the login page once approved.', 'warning')
                 return redirect(url_for('auth.login'))
             elif user['status'] == 'rejected':
                 flash('❌ Your registration request was rejected by Admin.', 'danger')
@@ -221,7 +221,7 @@ def register():
         )
         
         log_action(user_id, 'REGISTER', request.remote_addr, 'New user registered (Pending Admin Approval)')
-        flash('Registration submitted successfully! Your account is pending Admin approval. You will receive an email containing your official User ID once approved by Admin.', 'success')
+        flash('Registration submitted successfully! Your account is pending Admin approval. Once approved, click "Check Registration Status" on the login page to retrieve your User ID.', 'success')
         return redirect(url_for('auth.login'))
     
     return render_template('auth/register.html', questions=SECURITY_QUESTIONS)
