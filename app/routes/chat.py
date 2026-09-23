@@ -268,6 +268,43 @@ def send_message():
                 'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by Admin."
             })
         
+        if is_group and not is_flagged:
+            try:
+                from app import socketio
+                from datetime import datetime
+                group_info = query_db("SELECT name FROM `groups` WHERE id = %s", (receiver_id,), one=True)
+                group_name = group_info['name'] if group_info and group_info.get('name') else f"Group {receiver_id}"
+                sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
+                sender_name = sender_info['username'] if sender_info and sender_info.get('username') else f"User {user_id}"
+                
+                time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                msg_payload = {
+                    'message_id': message_id,
+                    'sender_id': user_id,
+                    'receiver_id': receiver_id,
+                    'content': content,
+                    'message_type': 'text',
+                    'is_flagged': False,
+                    'threat_type': 'none',
+                    'sent_at': time_str,
+                    'sender_name': sender_name,
+                    'is_group': True,
+                    'group_id': receiver_id,
+                    'group_name': group_name
+                }
+                
+                members = query_db("SELECT DISTINCT user_id FROM group_members WHERE group_id = %s", (receiver_id,))
+                if not members:
+                    members = query_db("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'")
+                
+                for m in (members or []):
+                    m_id = m['user_id']
+                    if int(m_id) != int(user_id):
+                        socketio.emit('new_group_message', msg_payload, room=f'user_{m_id}')
+                socketio.emit('new_group_message', msg_payload, room=f'group_{receiver_id}')
+            except Exception as e:
+                print(f"Backend group socket emit error: {e}")
+
         log_action(user_id, 'SEND_MESSAGE', request.remote_addr, f"To {'group' if is_group else 'user'}: {receiver_id}")
         
         return jsonify({

@@ -292,6 +292,35 @@ async function loadMessages(userId, isGroup = false) {
     }
 }
 
+function scrollToBottom() {
+    const area = document.getElementById('messagesArea');
+    if (area) {
+        area.scrollTop = area.scrollHeight;
+    }
+}
+
+function appendMessage(msg) {
+    const area = document.getElementById('messagesArea');
+    if (!area) return;
+
+    const emptyPlaceholder = area.querySelector('.loading-messages');
+    if (emptyPlaceholder) {
+        area.innerHTML = '';
+    }
+
+    if (area.children.length === 0) {
+        const msgDate = (msg.sent_at || '').split(' ')[0] || 'Today';
+        area.appendChild(createDateSeparator(msgDate));
+    }
+
+    const msgId = msg.message_id || msg.id;
+    if (msgId && document.getElementById(`msg-${msgId}`)) {
+        return;
+    }
+
+    area.appendChild(createMessageEl(msg));
+}
+
 let currentReplyTo = null;
 
 // ─── Create Message Element ───────────────────────────────────────
