@@ -1247,7 +1247,7 @@ async function submitUpdateUsername(e) {
         alert('Failed to update username');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-save"></i> Save Username';
+        btn.textContent = 'Save Username';
     }
 }
 
@@ -1283,7 +1283,7 @@ async function submitChangePassword(e) {
         alert('Failed to change password');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-lock"></i> Update Password';
+        btn.textContent = 'Update Password';
     }
 }
 
@@ -1316,7 +1316,7 @@ async function submitUpdateSecurityQuestion(e) {
         alert('Failed to update security question');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-save"></i> Save Question';
+        btn.textContent = 'Save Question';
     }
 }
 
