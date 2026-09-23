@@ -50,7 +50,7 @@ def register_socket_events(socketio):
     def on_send_group_message(data):
         group_id = data.get('group_id')
         message = data.get('message', {})
-        emit('new_group_message', message, room=f'group_{group_id}', include_self=False)
+        emit('new_group_message', message, broadcast=True, include_self=False)
 
     @socketio.on('typing')
     def on_typing(data):

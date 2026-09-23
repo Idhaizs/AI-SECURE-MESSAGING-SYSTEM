@@ -1961,31 +1961,32 @@ async function loadUnreadCounts() {
         const data = await res.json();
 
         if (data.success && data.unread_counts) {
-            let totalUnread = 0;
             document.querySelectorAll('.unread-pill-badge').forEach(badge => badge.style.display = 'none');
 
             for (const [senderId, count] of Object.entries(data.unread_counts)) {
-                if (count > 0) {
-                    totalUnread += count;
+                if (count > 0 && String(senderId) !== String(currentReceiverId)) {
+                    unreadCounts[senderId] = count;
                     const badge = document.getElementById(`unread-badge-${senderId}`);
                     if (badge) {
                         badge.textContent = count;
-                        badge.style.display = 'inline-block';
+                        badge.style.display = 'inline-flex';
                     }
                     const timeEl = document.getElementById(`time-${senderId}`);
                     if (timeEl) timeEl.style.color = '#22c55e';
                 }
             }
 
-            const navBadge = document.getElementById('navChatsBadge');
-            if (navBadge) {
-                if (totalUnread > 0) {
-                    navBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
-                    navBadge.style.display = 'flex';
-                } else {
-                    navBadge.style.display = 'none';
+            for (const [key, count] of Object.entries(unreadCounts)) {
+                if (String(key).startsWith('g-') && count > 0) {
+                    const badge = document.getElementById(`unread-badge-${key}`);
+                    if (badge) {
+                        badge.textContent = count;
+                        badge.style.display = 'inline-flex';
+                    }
                 }
             }
+
+            updateNavChatsBadge();
         }
     } catch (err) {}
 }
