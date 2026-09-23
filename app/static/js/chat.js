@@ -157,6 +157,9 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
 socket.on('connect', () => console.log('Connected to server'));
 
 socket.on('new_message', (msg) => {
+    if (String(msg.sender_id) === String(currentUserId)) {
+        return;
+    }
     const isCurrentChat = (!currentIsGroup && (String(msg.sender_id) === String(currentReceiverId) || String(msg.receiver_id) === String(currentReceiverId)));
     if (isCurrentChat) {
         appendMessage(msg);
@@ -167,6 +170,9 @@ socket.on('new_message', (msg) => {
 });
 
 socket.on('new_group_message', (msg) => {
+    if (String(msg.sender_id) === String(currentUserId)) {
+        return;
+    }
     const isCurrentChat = (currentIsGroup && String(msg.group_id) === String(currentReceiverId));
     if (isCurrentChat) {
         appendMessage(msg);
