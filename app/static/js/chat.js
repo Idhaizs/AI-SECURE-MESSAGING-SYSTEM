@@ -111,12 +111,16 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
     const timeEl = document.getElementById(`time-${formattedTargetId}`);
     const badgeEl = document.getElementById(`unread-badge-${formattedTargetId}`);
 
-    const displayPreview = (isGroup && senderName) ? `${senderName}: ${previewText}` : previewText;
+    const displayPreview = (isGroup && senderName) ? `~ ${senderName}: ${previewText}` : previewText;
 
     if (previewEl) previewEl.textContent = displayPreview;
     if (timeEl) {
         const formattedTime = timeStr ? (timeStr.includes(' ') ? timeStr.split(' ')[1].slice(0, 5) : timeStr) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         timeEl.textContent = formattedTime;
+        if (isUnread) {
+            timeEl.style.color = '#22c55e';
+            timeEl.style.fontWeight = '700';
+        }
     }
 
     if (contactEl) {
@@ -136,13 +140,13 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
         playNotificationSound();
 
         const toastTitle = isGroup ? `💬 Group: ${groupName || 'Chat'}` : `💬 ${senderName || 'New Message'}`;
-        const toastBody = (isGroup && senderName) ? `<b>${escapeHtml(senderName)}</b>: ${escapeHtml(previewText)}` : escapeHtml(previewText);
+        const toastBody = (isGroup && senderName) ? `<b>~ ${escapeHtml(senderName)}</b>: ${escapeHtml(previewText)}` : escapeHtml(previewText);
         showNotificationToast(toastTitle, toastBody, formattedTargetId, isGroup, groupId || targetId);
 
         if ("Notification" in window && Notification.permission === "granted") {
             try {
                 new Notification(toastTitle, {
-                    body: isGroup ? `${senderName}: ${previewText}` : previewText
+                    body: isGroup ? `~ ${senderName}: ${previewText}` : previewText
                 });
             } catch(e) {}
         }
@@ -226,7 +230,10 @@ function openChat(userId, username, isGroup = false) {
     }
 
     const timeEl = document.getElementById(currentIsGroup ? `time-g-${userId}` : `time-${userId}`);
-    if (timeEl) timeEl.style.color = '#64748b';
+    if (timeEl) {
+        timeEl.style.color = '#64748b';
+        timeEl.style.fontWeight = 'normal';
+    }
 
     if (!currentIsGroup) {
         fetch(`/chat/mark-read/${userId}`, { method: 'POST' }).then(() => loadUnreadCounts());
