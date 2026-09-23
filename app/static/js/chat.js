@@ -170,6 +170,11 @@ socket.on('new_message', (msg) => {
 });
 
 socket.on('new_group_message', (msg) => {
+    console.log('📨 Group message received:', msg);
+    console.log('🔍 Looking for element:', `unread-badge-g-${msg.group_id}`);
+    const badgeEl = document.getElementById(`unread-badge-g-${msg.group_id}`);
+    console.log('🏷️ Badge element found:', badgeEl);
+
     if (String(msg.sender_id) === String(currentUserId)) {
         return;
     }

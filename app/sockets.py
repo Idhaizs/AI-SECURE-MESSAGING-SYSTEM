@@ -13,8 +13,8 @@ def register_socket_events(socketio):
             if role == 'admin':
                 join_room('admin_room')
             try:
-                all_groups = query_db("SELECT id as group_id FROM `groups` UNION SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
-                for g in (all_groups or []):
+                user_groups = query_db("SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
+                for g in (user_groups or []):
                     join_room(f"group_{g['group_id']}")
             except Exception:
                 pass
