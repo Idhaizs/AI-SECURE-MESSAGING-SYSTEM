@@ -154,7 +154,12 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
 }
 
 // ─── Socket Events ────────────────────────────────────────────────
-socket.on('connect', () => console.log('Connected to server'));
+socket.on('connect', () => {
+    console.log('Connected to server');
+    if (currentUserId) {
+        socket.emit('register_user', { user_id: currentUserId });
+    }
+});
 
 socket.on('new_message', (msg) => {
     if (String(msg.sender_id) === String(currentUserId)) {
@@ -178,13 +183,19 @@ socket.on('new_group_message', (msg) => {
     if (String(msg.sender_id) === String(currentUserId)) {
         return;
     }
+
+    const groupItem = document.querySelector(`[data-user-id="g-${msg.group_id}"]`);
+    if (!groupItem) {
+        return;
+    }
+
     const isCurrentChat = (currentIsGroup && String(msg.group_id) === String(currentReceiverId));
     if (isCurrentChat) {
         appendMessage(msg);
         scrollToBottom();
     }
     const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
-    const groupName = msg.group_name || document.querySelector(`[data-user-id="g-${msg.group_id}"]`)?.getAttribute('data-username') || `Group ${msg.group_id}`;
+    const groupName = msg.group_name || groupItem.getAttribute('data-username') || `Group ${msg.group_id}`;
     updateContactPreview(`g-${msg.group_id}`, previewText, msg.sent_at, !isCurrentChat, msg.sender_name, true, groupName, msg.group_id);
 });
 

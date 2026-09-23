@@ -20,6 +20,18 @@ def register_socket_events(socketio):
                 pass
             socketio.emit('connected', {'user_id': user_id, 'role': role}, to=f'user_{user_id}')
 
+    @socketio.on('register_user')
+    def on_register_user(data):
+        user_id = data.get('user_id') or session.get('user_id')
+        if user_id:
+            join_room(f'user_{user_id}')
+            try:
+                user_groups = query_db("SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
+                for g in (user_groups or []):
+                    join_room(f"group_{g['group_id']}")
+            except Exception as e:
+                print(f"Error registering user rooms: {e}")
+
     @socketio.on('disconnect')
     def on_disconnect():
         user_id = session.get('user_id')
@@ -49,7 +61,7 @@ def register_socket_events(socketio):
     def on_send_group_message(data):
         group_id = data.get('group_id')
         message = data.get('message', {})
-        sender_id = session.get('user_id')
+        sender_id = session.get('user_id') or message.get('sender_id')
         
         if group_id:
             try:
@@ -65,6 +77,7 @@ def register_socket_events(socketio):
                 print(f"Socket group message error: {e}")
 
             socketio.emit('new_group_message', message, to=f'group_{group_id}')
+            socketio.emit('new_group_message', message)
 
     @socketio.on('typing')
     def on_typing(data):
