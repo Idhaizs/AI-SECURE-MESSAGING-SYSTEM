@@ -6,7 +6,24 @@ const socket = io();
 let currentReceiverId = null;
 let currentReceiverName = null;
 let typingTimer = null;
-const currentUserId = parseInt(document.getElementById('currentUserId').value);
+
+function getCurrentUserId() {
+    const el = document.getElementById('currentUserId');
+    if (el && el.value) {
+        const parsed = parseInt(el.value, 10);
+        if (!isNaN(parsed)) return parsed;
+    }
+    return null;
+}
+
+let currentUserId = getCurrentUserId();
+
+function getUserId() {
+    if (!currentUserId || isNaN(currentUserId)) {
+        currentUserId = getCurrentUserId();
+    }
+    return currentUserId;
+}
 
 // Voice Recorder variables
 let mediaRecorder = null;
@@ -156,13 +173,22 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
 // ─── Socket Events ────────────────────────────────────────────────
 socket.on('connect', () => {
     console.log('Connected to server');
-    if (currentUserId) {
-        socket.emit('register_user', { user_id: currentUserId });
+    const uid = getUserId();
+    if (uid) {
+        socket.emit('register_user', { user_id: uid });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const uid = getUserId();
+    if (uid && socket && socket.connected) {
+        socket.emit('register_user', { user_id: uid });
     }
 });
 
 socket.on('new_message', (msg) => {
-    if (String(msg.sender_id) === String(currentUserId)) {
+    const uid = getUserId();
+    if (uid && String(msg.sender_id) === String(uid)) {
         return;
     }
     const isCurrentChat = (!currentIsGroup && (String(msg.sender_id) === String(currentReceiverId) || String(msg.receiver_id) === String(currentReceiverId)));
@@ -176,26 +202,20 @@ socket.on('new_message', (msg) => {
 
 socket.on('new_group_message', (msg) => {
     console.log('📨 Group message received:', msg);
-    console.log('🔍 Looking for element:', `unread-badge-g-${msg.group_id}`);
-    const badgeEl = document.getElementById(`unread-badge-g-${msg.group_id}`);
-    console.log('🏷️ Badge element found:', badgeEl);
+    const uid = getUserId();
 
-    if (String(msg.sender_id) === String(currentUserId)) {
+    if (uid && String(msg.sender_id) === String(uid)) {
         return;
     }
 
     const groupItem = document.querySelector(`[data-user-id="g-${msg.group_id}"]`);
-    if (!groupItem) {
-        return;
-    }
-
     const isCurrentChat = (currentIsGroup && String(msg.group_id) === String(currentReceiverId));
     if (isCurrentChat) {
         appendMessage(msg);
         scrollToBottom();
     }
     const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
-    const groupName = msg.group_name || groupItem.getAttribute('data-username') || `Group ${msg.group_id}`;
+    const groupName = msg.group_name || (groupItem ? groupItem.getAttribute('data-username') : null) || `Group ${msg.group_id}`;
     updateContactPreview(`g-${msg.group_id}`, previewText, msg.sent_at, !isCurrentChat, msg.sender_name, true, groupName, msg.group_id);
 });
 
