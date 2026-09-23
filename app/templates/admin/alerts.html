@@ -44,9 +44,9 @@
                             <td>{{ alert.created_at.strftime('%d/%m %H:%M') if alert.created_at else '-' }}</td>
                             <td style="display:flex;gap:6px;align-items:center;">
                                 {% if alert.status != 'resolved' %}
-                                <button class="toggle-btn unblock" onclick="resolveAlert({{ alert.alert_id or alert.id }})">Resolve</button>
+                                <button class="toggle-btn unblock" onclick="resolveAlert('{{ alert.alert_id or alert.id }}')">Resolve</button>
                                 {% endif %}
-                                <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;" onclick="deleteAlert({{ alert.alert_id or alert.id }})">
+                                <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;" onclick="deleteAlert('{{ alert.alert_id or alert.id }}')">
                                     <i class="fas fa-trash"></i> Delete
                                 </button>
                             </td>

@@ -10,10 +10,14 @@ def inject_admin_globals():
     if 'user_id' in session and session.get('role') == 'admin':
         try:
             unread = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)
-            return {'unread_alerts_count': unread['count'] if unread else 0}
+            pending = query_db("SELECT COUNT(*) as count FROM users WHERE status = 'pending'", one=True)
+            return {
+                'unread_alerts_count': unread['count'] if unread else 0,
+                'pending_users_count': pending['count'] if pending else 0
+            }
         except Exception:
-            return {'unread_alerts_count': 0}
-    return {'unread_alerts_count': 0}
+            return {'unread_alerts_count': 0, 'pending_users_count': 0}
+    return {'unread_alerts_count': 0, 'pending_users_count': 0}
 
 def admin_required(f):
     @wraps(f)
@@ -89,6 +93,7 @@ def unread_alerts_api():
     unread_alerts_count = query_db("SELECT COUNT(*) as count FROM alerts WHERE status = 'unread'", one=True)['count']
     unread_flagged_count = query_db("SELECT COUNT(*) as count FROM messages WHERE is_flagged = 1", one=True)['count']
     total_unread = max(unread_alerts_count, unread_flagged_count)
+    pending_users_count = query_db("SELECT COUNT(*) as count FROM users WHERE status = 'pending'", one=True)['count']
     
     latest_alert = query_db("""
         SELECT a.*, COALESCE(u.username, u2.username, 'System') as username 
@@ -113,6 +118,7 @@ def unread_alerts_api():
 
     return jsonify({
         'unread_count': total_unread,
+        'pending_users_count': pending_users_count,
         'latest_alert': dict(latest_alert) if latest_alert else None
     })
 
@@ -225,25 +231,37 @@ def alerts():
     return render_template('admin/alerts.html', alerts=formatted_alerts)
 
 # ─── Mark Alert Read ──────────────────────────────────────────────
-@admin_bp.route('/admin/alerts/<int:alert_id>/read', methods=['POST'])
+@admin_bp.route('/admin/alerts/<alert_id>/read', methods=['POST'])
 @admin_required
 def mark_alert_read(alert_id):
-    query_db("UPDATE alerts SET status = 'read' WHERE alert_id = %s", (alert_id,), commit=True)
+    query_db("UPDATE alerts SET status = 'read' WHERE alert_id = %s OR id = %s", (alert_id, alert_id), commit=True)
     return jsonify({'success': True})
 
 # ─── Resolve Alert ────────────────────────────────────────────────
-@admin_bp.route('/admin/alerts/<int:alert_id>/resolve', methods=['POST'])
+@admin_bp.route('/admin/alerts/<alert_id>/resolve', methods=['POST'])
 @admin_required
 def resolve_alert(alert_id):
-    query_db("UPDATE alerts SET status = 'resolved' WHERE alert_id = %s OR id = %s", (alert_id, alert_id), commit=True)
+    alert_str = str(alert_id)
+    if alert_str.startswith('m-'):
+        msg_id = alert_str.replace('m-', '')
+        query_db("UPDATE messages SET is_flagged = 0 WHERE id = %s OR message_id = %s", (msg_id, msg_id), commit=True)
+        query_db("UPDATE alerts SET status = 'resolved' WHERE message_id = %s", (msg_id,), commit=True)
+    else:
+        query_db("UPDATE alerts SET status = 'resolved' WHERE alert_id = %s OR id = %s", (alert_id, alert_id), commit=True)
     log_action(session['user_id'], 'RESOLVE_ALERT', request.remote_addr, f"Alert ID: {alert_id}")
     return jsonify({'success': True})
 
 # ─── Delete Alert ─────────────────────────────────────────────────
-@admin_bp.route('/admin/alerts/<int:alert_id>/delete', methods=['POST'])
+@admin_bp.route('/admin/alerts/<alert_id>/delete', methods=['POST'])
 @admin_required
 def delete_alert(alert_id):
-    query_db("DELETE FROM alerts WHERE alert_id = %s OR id = %s", (alert_id, alert_id), commit=True)
+    alert_str = str(alert_id)
+    if alert_str.startswith('m-'):
+        msg_id = alert_str.replace('m-', '')
+        query_db("DELETE FROM alerts WHERE message_id = %s", (msg_id,), commit=True)
+        query_db("DELETE FROM messages WHERE id = %s OR message_id = %s", (msg_id, msg_id), commit=True)
+    else:
+        query_db("DELETE FROM alerts WHERE alert_id = %s OR id = %s", (alert_id, alert_id), commit=True)
     log_action(session['user_id'], 'ADMIN_DELETE_ALERT', request.remote_addr, f"Deleted alert ID: {alert_id}")
     return jsonify({'success': True})
 
