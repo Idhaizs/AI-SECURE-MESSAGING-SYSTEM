@@ -1,5 +1,5 @@
 from flask import session
-from flask_socketio import emit, join_room, leave_room
+from flask_socketio import join_room, leave_room
 from app.utils.db import query_db
 
 def register_socket_events(socketio):
@@ -18,7 +18,7 @@ def register_socket_events(socketio):
                     join_room(f"group_{g['group_id']}")
             except Exception:
                 pass
-            emit('connected', {'user_id': user_id, 'role': role})
+            socketio.emit('connected', {'user_id': user_id, 'role': role}, to=f'user_{user_id}')
 
     @socketio.on('disconnect')
     def on_disconnect():
@@ -41,24 +41,38 @@ def register_socket_events(socketio):
         message = data.get('message', {})
         
         # Emit to receiver's room
-        emit('new_message', message, room=f'user_{receiver_id}')
-        
+        socketio.emit('new_message', message, to=f'user_{receiver_id}')
         # Echo back to sender
-        emit('message_sent', message)
+        socketio.emit('message_sent', message)
 
     @socketio.on('send_group_message')
     def on_send_group_message(data):
         group_id = data.get('group_id')
         message = data.get('message', {})
-        emit('new_group_message', message, broadcast=True, include_self=False)
+        sender_id = session.get('user_id')
+        
+        if group_id:
+            try:
+                members = query_db("SELECT DISTINCT user_id FROM group_members WHERE group_id = %s", (group_id,))
+                if not members:
+                    members = query_db("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'")
+                
+                for m in (members or []):
+                    m_id = m['user_id']
+                    if str(m_id) != str(sender_id):
+                        socketio.emit('new_group_message', message, to=f'user_{m_id}')
+            except Exception as e:
+                print(f"Socket group message error: {e}")
+
+            socketio.emit('new_group_message', message, to=f'group_{group_id}')
 
     @socketio.on('typing')
     def on_typing(data):
         receiver_id = data.get('receiver_id')
         username = session.get('username')
-        emit('user_typing', {'username': username}, room=f'user_{receiver_id}')
+        socketio.emit('user_typing', {'username': username}, to=f'user_{receiver_id}')
 
     @socketio.on('stop_typing')
     def on_stop_typing(data):
         receiver_id = data.get('receiver_id')
-        emit('user_stop_typing', {}, room=f'user_{receiver_id}')
+        socketio.emit('user_stop_typing', {}, to=f'user_{receiver_id}')

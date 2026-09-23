@@ -300,8 +300,8 @@ def send_message():
                 for m in (members or []):
                     m_id = m['user_id']
                     if int(m_id) != int(user_id):
-                        socketio.emit('new_group_message', msg_payload, room=f'user_{m_id}')
-                socketio.emit('new_group_message', msg_payload, room=f'group_{receiver_id}')
+                        socketio.emit('new_group_message', msg_payload, to=f'user_{m_id}')
+                socketio.emit('new_group_message', msg_payload, to=f'group_{receiver_id}')
             except Exception as e:
                 print(f"Backend group socket emit error: {e}")
 
