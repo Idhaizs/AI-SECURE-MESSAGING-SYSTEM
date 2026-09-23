@@ -18,13 +18,23 @@ let recordingSeconds = 0;
 socket.on('connect', () => console.log('Connected to server'));
 
 socket.on('new_message', (msg) => {
-    const isCurrentChat = (String(msg.sender_id) === String(currentReceiverId) || String(msg.receiver_id) === String(currentReceiverId));
+    const isCurrentChat = (!currentIsGroup && (String(msg.sender_id) === String(currentReceiverId) || String(msg.receiver_id) === String(currentReceiverId)));
     if (isCurrentChat) {
         appendMessage(msg);
         scrollToBottom();
     }
     const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
     updateContactPreview(msg.sender_id, previewText, msg.sent_at, !isCurrentChat);
+});
+
+socket.on('new_group_message', (msg) => {
+    const isCurrentChat = (currentIsGroup && String(msg.group_id) === String(currentReceiverId));
+    if (isCurrentChat) {
+        appendMessage(msg);
+        scrollToBottom();
+    }
+    const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
+    updateContactPreview(`g-${msg.group_id}`, previewText, msg.sent_at, !isCurrentChat);
 });
 
 socket.on('user_typing', (data) => {
@@ -64,13 +74,20 @@ function openChat(userId, username, isGroup = false) {
     if (panelCalendar) panelCalendar.style.display = 'none';
     if (chatMain) chatMain.style.display = 'flex';
 
-    // Clear unread badge for this user
-    const badge = document.getElementById(`unread-badge-${userId}`);
+    if (currentIsGroup) {
+        socket.emit('join_group', { group_id: userId });
+    }
+
+    // Clear unread badge for this user/group
+    const badgeId = currentIsGroup ? `unread-badge-g-${userId}` : `unread-badge-${userId}`;
+    const badge = document.getElementById(badgeId);
     if (badge) badge.style.display = 'none';
-    const timeEl = document.getElementById(`time-${userId}`);
+    const timeEl = document.getElementById(currentIsGroup ? `time-g-${userId}` : `time-${userId}`);
     if (timeEl) timeEl.style.color = '#64748b';
 
-    fetch(`/chat/mark-read/${userId}`, { method: 'POST' }).then(() => loadUnreadCounts());
+    if (!currentIsGroup) {
+        fetch(`/chat/mark-read/${userId}`, { method: 'POST' }).then(() => loadUnreadCounts());
+    }
 
     // Update UI
     document.getElementById('chatEmpty').style.display = 'none';
@@ -90,28 +107,29 @@ function openChat(userId, username, isGroup = false) {
     toggleMobileView(true);
 
     // Load messages
-    loadMessages(userId);
+    loadMessages(userId, currentIsGroup);
 }
 
 // ─── Load Messages ────────────────────────────────────────────────
-async function loadMessages(userId) {
+async function loadMessages(userId, isGroup = false) {
     const area = document.getElementById('messagesArea');
     area.innerHTML = '<div class="loading-messages"><i class="fas fa-spinner fa-spin"></i> Loading messages...</div>';
 
     try {
-        const res = await fetch(`/chat/messages/${userId}`);
+        const url = isGroup ? `/chat/messages/${userId}?is_group=true` : `/chat/messages/${userId}`;
+        const res = await fetch(url);
         const messages = await res.json();
 
         area.innerHTML = '';
 
-        if (messages.length === 0) {
+        if (!Array.isArray(messages) || messages.length === 0) {
             area.innerHTML = '<div class="loading-messages" style="color:#94a3b8">No messages yet. Start the conversation!</div>';
             return;
         }
 
         let lastDate = null;
         messages.forEach(msg => {
-            const msgDate = msg.sent_at.split(' ')[0];
+            const msgDate = (msg.sent_at || '').split(' ')[0] || 'Today';
             if (msgDate !== lastDate) {
                 area.appendChild(createDateSeparator(msgDate));
                 lastDate = msgDate;
@@ -237,6 +255,9 @@ async function sendMessage() {
         const formData = new FormData();
         formData.append('receiver_id', currentReceiverId);
         formData.append('content', content);
+        if (currentIsGroup) {
+            formData.append('is_group', 'true');
+        }
 
         const res = await fetch('/chat/send', { method: 'POST', body: formData });
         const data = await res.json();
@@ -254,7 +275,9 @@ async function sendMessage() {
                 is_flagged: data.is_flagged,
                 threat_type: data.threat_type,
                 sent_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                sender_name: document.getElementById('currentUsername').value
+                sender_name: document.getElementById('currentUsername').value,
+                is_group: currentIsGroup,
+                group_id: currentReceiverId
             };
 
             appendMessage(msg);
@@ -264,8 +287,13 @@ async function sendMessage() {
                 showThreatWarning(data.warning);
             }
 
-            socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
-            updateContactPreview(currentReceiverId, content, msg.sent_at);
+            if (currentIsGroup) {
+                socket.emit('send_group_message', { group_id: currentReceiverId, message: msg });
+                updateContactPreview(`g-${currentReceiverId}`, content, msg.sent_at);
+            } else {
+                socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
+                updateContactPreview(currentReceiverId, content, msg.sent_at);
+            }
         } else {
             if (data.account_blocked || data.redirect) {
                 alert(data.error || '🚫 Your account has been suspended by Admin due to a security violation.');
@@ -384,6 +412,9 @@ async function confirmUploadFile() {
     const formData = new FormData();
     formData.append('file', selectedFileForUpload);
     formData.append('receiver_id', currentReceiverId);
+    if (currentIsGroup) {
+        formData.append('is_group', 'true');
+    }
     if (isProtected && password) {
         formData.append('file_password', password);
     }
@@ -409,13 +440,20 @@ async function confirmUploadFile() {
                 scan_result: data.scan_result,
                 is_password_protected: data.is_password_protected,
                 sent_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                sender_name: document.getElementById('currentUsername').value
+                sender_name: document.getElementById('currentUsername').value,
+                is_group: currentIsGroup,
+                group_id: currentReceiverId
             };
 
             appendMessage(msg);
             scrollToBottom();
-            socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
-            updateContactPreview(currentReceiverId, `📎 ${data.file_name}`, msg.sent_at);
+            if (currentIsGroup) {
+                socket.emit('send_group_message', { group_id: currentReceiverId, message: msg });
+                updateContactPreview(`g-${currentReceiverId}`, `📎 ${data.file_name}`, msg.sent_at);
+            } else {
+                socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
+                updateContactPreview(currentReceiverId, `📎 ${data.file_name}`, msg.sent_at);
+            }
         } else {
             if (data.account_blocked || data.redirect) {
                 alert(data.error || '🚫 Your account has been suspended by Admin due to a security violation.');
