@@ -14,6 +14,141 @@ let audioChunks = [];
 let recordingInterval = null;
 let recordingSeconds = 0;
 
+// ─── Unread Badge & Notification System ─────────────────────────────
+const unreadCounts = {};
+
+if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+}
+
+function playNotificationSound() {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+        console.log("Audio notification sound error:", e);
+    }
+}
+
+function updateNavChatsBadge() {
+    const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + (parseInt(b) || 0), 0);
+    const navBadge = document.getElementById('navChatsBadge');
+    if (navBadge) {
+        if (totalUnread > 0) {
+            navBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+            navBadge.style.display = 'inline-flex';
+        } else {
+            navBadge.style.display = 'none';
+        }
+    }
+}
+
+function showNotificationToast(title, bodyText, targetId, isGroup = false, rawId = null) {
+    const container = document.getElementById('toastNotificationContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.style.cssText = `
+        background: #1e293b;
+        color: #ffffff;
+        padding: 12px 16px;
+        border-radius: 10px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        border-left: 4px solid #38bdf8;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 13px;
+        cursor: pointer;
+        pointer-events: auto;
+        transition: all 0.3s ease;
+    `;
+
+    toast.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:700; color:#38bdf8;">${title}</span>
+            <span style="font-size:11px; opacity:0.6;">Just now</span>
+        </div>
+        <div style="font-size:12px; color:#cbd5e1; word-break:break-word;">${bodyText}</div>
+    `;
+
+    toast.onclick = () => {
+        const cleanId = parseInt(String(rawId || targetId).replace('g-', ''));
+        const contactEl = document.querySelector(`[data-user-id="${targetId}"]`);
+        const username = contactEl?.getAttribute('data-username') || (isGroup ? 'Group Chat' : 'User');
+        openChat(cleanId, username, isGroup);
+        toast.remove();
+    };
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(50px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4500);
+}
+
+function updateContactPreview(targetId, previewText, timeStr, isUnread = false, senderName = '', isGroup = false, groupName = '', groupId = null) {
+    const formattedTargetId = String(targetId).startsWith('g-') ? targetId : (isGroup ? `g-${targetId}` : String(targetId));
+    const selector = `[data-user-id="${formattedTargetId}"]`;
+    const contactEl = document.querySelector(selector);
+    
+    const previewEl = document.getElementById(`preview-${formattedTargetId}`);
+    const timeEl = document.getElementById(`time-${formattedTargetId}`);
+    const badgeEl = document.getElementById(`unread-badge-${formattedTargetId}`);
+
+    const displayPreview = (isGroup && senderName) ? `${senderName}: ${previewText}` : previewText;
+
+    if (previewEl) previewEl.textContent = displayPreview;
+    if (timeEl) {
+        const formattedTime = timeStr ? (timeStr.includes(' ') ? timeStr.split(' ')[1].slice(0, 5) : timeStr) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        timeEl.textContent = formattedTime;
+    }
+
+    if (contactEl) {
+        const contactsList = document.getElementById('contactsList');
+        if (contactsList && contactsList.firstChild !== contactEl) {
+            contactsList.insertBefore(contactEl, contactsList.firstChild);
+        }
+    }
+
+    if (isUnread) {
+        unreadCounts[formattedTargetId] = (unreadCounts[formattedTargetId] || 0) + 1;
+        if (badgeEl) {
+            badgeEl.textContent = unreadCounts[formattedTargetId];
+            badgeEl.style.display = 'inline-flex';
+        }
+        updateNavChatsBadge();
+        playNotificationSound();
+
+        const toastTitle = isGroup ? `💬 Group: ${groupName || 'Chat'}` : `💬 ${senderName || 'New Message'}`;
+        const toastBody = (isGroup && senderName) ? `<b>${escapeHtml(senderName)}</b>: ${escapeHtml(previewText)}` : escapeHtml(previewText);
+        showNotificationToast(toastTitle, toastBody, formattedTargetId, isGroup, groupId || targetId);
+
+        if ("Notification" in window && Notification.permission === "granted") {
+            try {
+                new Notification(toastTitle, {
+                    body: isGroup ? `${senderName}: ${previewText}` : previewText
+                });
+            } catch(e) {}
+        }
+    }
+}
+
 // ─── Socket Events ────────────────────────────────────────────────
 socket.on('connect', () => console.log('Connected to server'));
 
@@ -24,7 +159,7 @@ socket.on('new_message', (msg) => {
         scrollToBottom();
     }
     const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
-    updateContactPreview(msg.sender_id, previewText, msg.sent_at, !isCurrentChat);
+    updateContactPreview(msg.sender_id, previewText, msg.sent_at, !isCurrentChat, msg.sender_name, false);
 });
 
 socket.on('new_group_message', (msg) => {
@@ -34,7 +169,8 @@ socket.on('new_group_message', (msg) => {
         scrollToBottom();
     }
     const previewText = msg.message_type === 'file' ? `📎 ${msg.file_name || 'File'}` : (msg.content || 'New message');
-    updateContactPreview(`g-${msg.group_id}`, previewText, msg.sent_at, !isCurrentChat);
+    const groupName = msg.group_name || document.querySelector(`[data-user-id="g-${msg.group_id}"]`)?.getAttribute('data-username') || `Group ${msg.group_id}`;
+    updateContactPreview(`g-${msg.group_id}`, previewText, msg.sent_at, !isCurrentChat, msg.sender_name, true, groupName, msg.group_id);
 });
 
 socket.on('user_typing', (data) => {
@@ -69,6 +205,17 @@ function openChat(userId, username, isGroup = false) {
     currentReceiverName = username;
     currentIsGroup = Boolean(isGroup);
 
+    const formattedTargetId = currentIsGroup ? `g-${userId}` : String(userId);
+    unreadCounts[formattedTargetId] = 0;
+
+    const badgeId = currentIsGroup ? `unread-badge-g-${userId}` : `unread-badge-${userId}`;
+    const badge = document.getElementById(badgeId);
+    if (badge) {
+        badge.textContent = '0';
+        badge.style.display = 'none';
+    }
+    updateNavChatsBadge();
+
     const chatMain = document.getElementById('chatMain');
     const panelCalendar = document.getElementById('panel-calendar');
     if (panelCalendar) panelCalendar.style.display = 'none';
@@ -78,10 +225,6 @@ function openChat(userId, username, isGroup = false) {
         socket.emit('join_group', { group_id: userId });
     }
 
-    // Clear unread badge for this user/group
-    const badgeId = currentIsGroup ? `unread-badge-g-${userId}` : `unread-badge-${userId}`;
-    const badge = document.getElementById(badgeId);
-    if (badge) badge.style.display = 'none';
     const timeEl = document.getElementById(currentIsGroup ? `time-g-${userId}` : `time-${userId}`);
     if (timeEl) timeEl.style.color = '#64748b';
 
@@ -283,7 +426,8 @@ async function sendMessage() {
                 sent_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
                 sender_name: document.getElementById('currentUsername').value,
                 is_group: currentIsGroup,
-                group_id: currentReceiverId
+                group_id: currentReceiverId,
+                group_name: currentReceiverName
             };
 
             appendMessage(msg);
@@ -295,10 +439,10 @@ async function sendMessage() {
 
             if (currentIsGroup) {
                 socket.emit('send_group_message', { group_id: currentReceiverId, message: msg });
-                updateContactPreview(`g-${currentReceiverId}`, content, msg.sent_at);
+                updateContactPreview(`g-${currentReceiverId}`, content, msg.sent_at, false, msg.sender_name, true, currentReceiverName, currentReceiverId);
             } else {
                 socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
-                updateContactPreview(currentReceiverId, content, msg.sent_at);
+                updateContactPreview(currentReceiverId, content, msg.sent_at, false, msg.sender_name, false);
             }
         } else {
             if (data.account_blocked || data.redirect) {
@@ -448,17 +592,18 @@ async function confirmUploadFile() {
                 sent_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
                 sender_name: document.getElementById('currentUsername').value,
                 is_group: currentIsGroup,
-                group_id: currentReceiverId
+                group_id: currentReceiverId,
+                group_name: currentReceiverName
             };
 
             appendMessage(msg);
             scrollToBottom();
             if (currentIsGroup) {
                 socket.emit('send_group_message', { group_id: currentReceiverId, message: msg });
-                updateContactPreview(`g-${currentReceiverId}`, `📎 ${data.file_name}`, msg.sent_at);
+                updateContactPreview(`g-${currentReceiverId}`, `📎 ${data.file_name}`, msg.sent_at, false, msg.sender_name, true, currentReceiverName, currentReceiverId);
             } else {
                 socket.emit('send_message', { receiver_id: currentReceiverId, message: msg });
-                updateContactPreview(currentReceiverId, `📎 ${data.file_name}`, msg.sent_at);
+                updateContactPreview(currentReceiverId, `📎 ${data.file_name}`, msg.sent_at, false, msg.sender_name, false);
             }
         } else {
             if (data.account_blocked || data.redirect) {
