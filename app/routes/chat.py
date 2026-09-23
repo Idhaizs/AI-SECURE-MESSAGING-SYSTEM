@@ -195,87 +195,92 @@ def send_message():
     
     if not content or not receiver_id:
         return jsonify({'success': False, 'error': 'Missing content or receiver'}), 400
-    
-    # AI Scan
-    scan_result = full_message_scan(content)
-    is_flagged = scan_result['is_suspicious']
-    threat_type = scan_result['threat_type'] if is_flagged else 'none'
-    
-    # Encrypt
-    encrypted = encrypt_message(content)
-    
-    if is_group:
-        member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
-        if not member:
-            query_db("INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (%s, %s, 'member')", (receiver_id, user_id), commit=True)
-            
-        message_id = query_db(
-            "INSERT INTO group_messages (group_id, sender_id, encrypted_content, message_type, is_flagged, threat_type, sent_at) VALUES (%s, %s, %s, 'text', %s, %s, NOW())",
-            (receiver_id, user_id, encrypted, is_flagged, threat_type), commit=True
-        )
-        query_db("UPDATE group_messages SET message_id = id WHERE id = %s", (message_id,), commit=True)
-    else:
-        # Save to DB
-        message_id = query_db(
-            "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'text', %s, %s, 0)",
-            (user_id, receiver_id, encrypted, is_flagged, threat_type), commit=True
-        )
-        query_db("UPDATE messages SET message_id = id WHERE id = %s", (message_id,), commit=True)
-    
-    # Create alert & auto-block user account if suspicious
-    if is_flagged:
-        sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
-        sender_name = sender_info['username'] if sender_info else f"User {user_id}"
+        
+    try:
+        # AI Scan
+        scan_result = full_message_scan(content)
+        is_flagged = scan_result['is_suspicious']
+        threat_type = scan_result['threat_type'] if is_flagged else 'none'
+        
+        # Encrypt
+        encrypted = encrypt_message(content)
         
         if is_group:
-            group_info = query_db("SELECT group_name FROM `groups` WHERE group_id = %s OR id = %s", (receiver_id, receiver_id), one=True)
-            receiver_name = f"Group '{group_info['group_name']}'" if group_info and group_info.get('group_name') else f"Group {receiver_id}"
+            member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
+            if not member:
+                query_db("INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (%s, %s, 'member')", (receiver_id, user_id), commit=True)
+                
+            message_id = query_db(
+                "INSERT INTO group_messages (group_id, sender_id, encrypted_content, message_type, is_flagged, threat_type, sent_at) VALUES (%s, %s, %s, 'text', %s, %s, NOW())",
+                (receiver_id, user_id, encrypted, is_flagged, threat_type), commit=True
+            )
+            query_db("UPDATE group_messages SET message_id = id WHERE id = %s", (message_id,), commit=True)
         else:
-            receiver_info = query_db("SELECT username FROM users WHERE user_id = %s", (receiver_id,), one=True)
-            receiver_name = receiver_info['username'] if receiver_info else f"User {receiver_id}"
+            # Save to DB
+            message_id = query_db(
+                "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'text', %s, %s, 0)",
+                (user_id, receiver_id, encrypted, is_flagged, threat_type), commit=True
+            )
+            query_db("UPDATE messages SET message_id = id WHERE id = %s", (message_id,), commit=True)
         
-        query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
-        
-        alert_detail = f"User '{sender_name}' sent {threat_type} to '{receiver_name}': \"{content[:100]}\" ({scan_result.get('detail', '')})"
-        query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, %s, %s, %s)",
-            (message_id, user_id, threat_type, alert_detail, 'high'), commit=True
-        )
-        log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for sending {threat_type} to '{receiver_name}': \"{content[:100]}\"")
-        
-        try:
-            from app import socketio
-            socketio.emit('account_blocked', {
-                'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by System."
-            }, room=f'user_{user_id}')
-            socketio.emit('admin_threat_alert', {
-                'sender_name': sender_name,
-                'user_id': user_id,
-                'threat_type': threat_type,
-                'alert_detail': alert_detail
-            }, room='admin_room')
-        except Exception:
-            pass
+        # Create alert & auto-block user account if suspicious
+        if is_flagged:
+            sender_info = query_db("SELECT username FROM users WHERE user_id = %s", (user_id,), one=True)
+            sender_name = sender_info['username'] if sender_info else f"User {user_id}"
+            
+            if is_group:
+                group_info = query_db("SELECT name as group_name FROM `groups` WHERE id = %s", (receiver_id,), one=True)
+                receiver_name = f"Group '{group_info['group_name']}'" if group_info and group_info.get('group_name') else f"Group {receiver_id}"
+            else:
+                receiver_info = query_db("SELECT username FROM users WHERE user_id = %s", (receiver_id,), one=True)
+                receiver_name = receiver_info['username'] if receiver_info else f"User {receiver_id}"
+            
+            query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
+            
+            alert_detail = f"User '{sender_name}' sent {threat_type} to '{receiver_name}': \"{content[:100]}\" ({scan_result.get('detail', '')})"
+            query_db(
+                "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, %s, %s, %s)",
+                (message_id, user_id, threat_type, alert_detail, 'high'), commit=True
+            )
+            log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for sending {threat_type} to '{receiver_name}': \"{content[:100]}\"")
+            
+            try:
+                from app import socketio
+                socketio.emit('account_blocked', {
+                    'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by System."
+                }, room=f'user_{user_id}')
+                socketio.emit('admin_threat_alert', {
+                    'sender_name': sender_name,
+                    'user_id': user_id,
+                    'threat_type': threat_type,
+                    'alert_detail': alert_detail
+                }, room='admin_room')
+            except Exception:
+                pass
 
-        session.clear()
-        from flask import flash
-        flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
+            session.clear()
+            from flask import flash
+            flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
+            return jsonify({
+                'success': False,
+                'account_blocked': True,
+                'redirect': '/login',
+                'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by Admin."
+            })
+        
+        log_action(user_id, 'SEND_MESSAGE', request.remote_addr, f"To {'group' if is_group else 'user'}: {receiver_id}")
+        
         return jsonify({
-            'success': False,
-            'account_blocked': True,
-            'redirect': '/login',
-            'error': f"🚫 Security Threat Detected ({threat_type})! Your account has been automatically suspended by Admin."
+            'success': True,
+            'message_id': message_id,
+            'is_flagged': is_flagged,
+            'threat_type': threat_type,
+            'warning': scan_result['detail'] if is_flagged else None
         })
-    
-    log_action(user_id, 'SEND_MESSAGE', request.remote_addr, f"To {'group' if is_group else 'user'}: {receiver_id}")
-    
-    return jsonify({
-        'success': True,
-        'message_id': message_id,
-        'is_flagged': is_flagged,
-        'threat_type': threat_type,
-        'warning': scan_result['detail'] if is_flagged else None
-    })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f"Server Error: {str(e)}"}), 500
 
 # ─── Upload File ──────────────────────────────────────────────────
 @chat_bp.route('/chat/upload', methods=['POST'])

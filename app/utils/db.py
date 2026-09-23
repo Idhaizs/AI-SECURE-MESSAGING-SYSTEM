@@ -34,6 +34,13 @@ def auto_migrate_database():
             cursor.execute("DESCRIBE group_messages")
             cols = [r['Field'] for r in cursor.fetchall()]
             
+            # Ensure iv and encrypted_content allow Null/Text insertions without MySQL Strict Mode errors
+            try:
+                cursor.execute("ALTER TABLE group_messages MODIFY COLUMN iv BLOB NULL DEFAULT NULL")
+                cursor.execute("ALTER TABLE group_messages MODIFY COLUMN encrypted_content TEXT NOT NULL")
+            except Exception:
+                pass
+
             if 'message_type' not in cols:
                 cursor.execute("ALTER TABLE group_messages ADD COLUMN message_type ENUM('text', 'file', 'voice') DEFAULT 'text'")
             if 'file_id' not in cols:
