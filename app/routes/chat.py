@@ -58,20 +58,70 @@ def get_messages(receiver_id):
     user_id = session['user_id']
     is_group = request.args.get('is_group') in ['true', '1', 'True']
     
-    if is_group:
+    try:
+        if is_group:
+            messages = query_db("""
+                SELECT gm.*, 
+                       s.username as sender_name,
+                       f.file_name, f.file_id, f.scan_result, f.is_password_protected
+                FROM group_messages gm
+                JOIN users s ON gm.sender_id = s.user_id
+                LEFT JOIN files f ON (gm.file_id = f.file_id OR (gm.id = f.message_id AND gm.message_type = 'file'))
+                WHERE gm.group_id = %s AND (gm.is_deleted IS NULL OR gm.is_deleted = 0)
+                ORDER BY gm.id ASC
+            """, (receiver_id,))
+            
+            result = []
+            for msg in (messages or []):
+                if msg.get('is_deleted'):
+                    content = "🚫 This message was deleted"
+                else:
+                    try:
+                        content = decrypt_message(msg['encrypted_content'])
+                        if isinstance(content, bytes):
+                            content = content.decode('utf-8', errors='ignore')
+                    except Exception:
+                        content = msg.get('file_name') or "Encrypted Content"
+                    
+                time_val = msg.get('sent_at') or msg.get('created_at')
+                time_str = time_val.strftime('%Y-%m-%d %H:%M:%S') if (time_val and hasattr(time_val, 'strftime')) else str(time_val or '')
+
+                result.append({
+                    'message_id': msg.get('message_id') or msg.get('id'),
+                    'sender_id': msg['sender_id'],
+                    'sender_name': msg['sender_name'],
+                    'content': content,
+                    'message_type': msg.get('message_type') or 'text',
+                    'is_flagged': bool(msg.get('is_flagged')),
+                    'threat_type': msg.get('threat_type') or 'none',
+                    'is_deleted': bool(msg.get('is_deleted')),
+                    'sent_at': time_str,
+                    'file_name': msg.get('file_name'),
+                    'file_id': msg.get('file_id'),
+                    'scan_result': msg.get('scan_result'),
+                    'is_password_protected': 1 if msg.get('is_password_protected') == 1 else 0,
+                    'is_group': True,
+                    'group_id': receiver_id
+                })
+            return jsonify(result)
+
         messages = query_db("""
-            SELECT gm.*, 
+            SELECT m.*, 
                    s.username as sender_name,
-                   f.file_name, f.file_id, f.scan_result, f.is_password_protected
-            FROM group_messages gm
-            JOIN users s ON gm.sender_id = s.user_id
-            LEFT JOIN files f ON (gm.file_id = f.file_id OR (gm.id = f.message_id AND gm.message_type = 'file'))
-            WHERE gm.group_id = %s AND (gm.is_deleted IS NULL OR gm.is_deleted = 0)
-            ORDER BY COALESCE(gm.sent_at, gm.created_at) ASC, gm.id ASC
-        """, (receiver_id,))
+                   r.username as receiver_name,
+                   f.file_name, f.file_id, f.scan_result, f.is_password_protected, f.uploader_id
+            FROM messages m
+            JOIN users s ON m.sender_id = s.user_id
+            JOIN users r ON m.receiver_id = r.user_id
+            LEFT JOIN files f ON (m.id = f.message_id OR m.message_id = f.message_id)
+            WHERE ((m.sender_id = %s AND m.receiver_id = %s)
+               OR (m.sender_id = %s AND m.receiver_id = %s))
+              AND (m.is_deleted IS NULL OR m.is_deleted = 0)
+            ORDER BY m.sent_at ASC, m.id ASC
+        """, (user_id, receiver_id, receiver_id, user_id))
         
         result = []
-        for msg in messages:
+        for msg in (messages or []):
             if msg.get('is_deleted'):
                 content = "🚫 This message was deleted"
             else:
@@ -82,6 +132,9 @@ def get_messages(receiver_id):
                 except Exception:
                     content = msg.get('file_name') or "Encrypted Content"
                 
+            time_val = msg.get('sent_at') or msg.get('created_at')
+            time_str = time_val.strftime('%Y-%m-%d %H:%M:%S') if (time_val and hasattr(time_val, 'strftime')) else str(time_val or '')
+
             result.append({
                 'message_id': msg.get('message_id') or msg.get('id'),
                 'sender_id': msg['sender_id'],
@@ -91,62 +144,20 @@ def get_messages(receiver_id):
                 'is_flagged': bool(msg.get('is_flagged')),
                 'threat_type': msg.get('threat_type') or 'none',
                 'is_deleted': bool(msg.get('is_deleted')),
-                'sent_at': msg['sent_at'].strftime('%Y-%m-%d %H:%M:%S') if msg.get('sent_at') else (msg['created_at'].strftime('%Y-%m-%d %H:%M:%S') if msg.get('created_at') else ''),
+                'sent_at': time_str,
                 'file_name': msg.get('file_name'),
                 'file_id': msg.get('file_id'),
                 'scan_result': msg.get('scan_result'),
-                'is_password_protected': 1 if msg.get('is_password_protected') == 1 else 0,
-                'is_group': True,
-                'group_id': receiver_id
+                'is_password_protected': 1 if msg.get('is_password_protected') == 1 else 0
             })
+        
+        # Mark messages from receiver_id as read
+        query_db("UPDATE messages SET is_read = 1 WHERE sender_id = %s AND receiver_id = %s AND (is_read = 0 OR is_read IS NULL)", (receiver_id, user_id), commit=True)
         return jsonify(result)
-
-    messages = query_db("""
-        SELECT m.*, 
-               s.username as sender_name,
-               r.username as receiver_name,
-               f.file_name, f.file_id, f.scan_result, f.is_password_protected, f.uploader_id
-        FROM messages m
-        JOIN users s ON m.sender_id = s.user_id
-        JOIN users r ON m.receiver_id = r.user_id
-        LEFT JOIN files f ON (m.id = f.message_id OR m.message_id = f.message_id)
-        WHERE ((m.sender_id = %s AND m.receiver_id = %s)
-           OR (m.sender_id = %s AND m.receiver_id = %s))
-          AND (m.is_deleted IS NULL OR m.is_deleted = 0)
-        ORDER BY m.sent_at ASC
-    """, (user_id, receiver_id, receiver_id, user_id))
-    
-    result = []
-    for msg in messages:
-        if msg.get('is_deleted'):
-            content = "🚫 This message was deleted"
-        else:
-            try:
-                content = decrypt_message(msg['encrypted_content'])
-                if isinstance(content, bytes):
-                    content = content.decode('utf-8', errors='ignore')
-            except Exception:
-                content = msg.get('file_name') or "Encrypted Content"
-            
-        result.append({
-            'message_id': msg.get('message_id') or msg.get('id'),
-            'sender_id': msg['sender_id'],
-            'sender_name': msg['sender_name'],
-            'content': content,
-            'message_type': msg['message_type'],
-            'is_flagged': msg['is_flagged'],
-            'threat_type': msg['threat_type'],
-            'is_deleted': bool(msg.get('is_deleted')),
-            'sent_at': msg['sent_at'].strftime('%Y-%m-%d %H:%M:%S') if msg['sent_at'] else '',
-            'file_name': msg['file_name'],
-            'file_id': msg['file_id'],
-            'scan_result': msg['scan_result'],
-            'is_password_protected': 1 if msg.get('is_password_protected') == 1 else 0
-        })
-    
-    # Mark messages from receiver_id as read
-    query_db("UPDATE messages SET is_read = 1 WHERE sender_id = %s AND receiver_id = %s AND (is_read = 0 OR is_read IS NULL)", (receiver_id, user_id), commit=True)
-    return jsonify(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 # ─── Unread Counts & Mark Read Endpoints ─────────────────────────
 @chat_bp.route('/chat/unread-counts')

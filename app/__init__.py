@@ -18,6 +18,13 @@ def create_app():
     # Create upload folder
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
+    # Auto migrate database schema
+    try:
+        from app.utils.db import auto_migrate_database
+        auto_migrate_database()
+    except Exception:
+        pass
+    
     # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.chat import chat_bp

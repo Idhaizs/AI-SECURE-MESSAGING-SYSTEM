@@ -118,11 +118,17 @@ async function loadMessages(userId, isGroup = false) {
     try {
         const url = isGroup ? `/chat/messages/${userId}?is_group=true` : `/chat/messages/${userId}`;
         const res = await fetch(url);
-        const messages = await res.json();
+        const data = await res.json();
 
+        if (!res.ok || (data && data.error)) {
+            area.innerHTML = `<div class="loading-messages" style="color:#ef4444">Failed to load messages (${(data && data.error) || res.status})</div>`;
+            return;
+        }
+
+        const messages = Array.isArray(data) ? data : [];
         area.innerHTML = '';
 
-        if (!Array.isArray(messages) || messages.length === 0) {
+        if (messages.length === 0) {
             area.innerHTML = '<div class="loading-messages" style="color:#94a3b8">No messages yet. Start the conversation!</div>';
             return;
         }
@@ -139,7 +145,7 @@ async function loadMessages(userId, isGroup = false) {
 
         scrollToBottom();
     } catch (err) {
-        area.innerHTML = '<div class="loading-messages" style="color:#ef4444">Failed to load messages</div>';
+        area.innerHTML = `<div class="loading-messages" style="color:#ef4444">Failed to load messages (${err.message})</div>`;
     }
 }
 
