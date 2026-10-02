@@ -239,8 +239,8 @@ def send_message():
             
             alert_detail = f"User '{sender_name}' sent {threat_type} to '{receiver_name}': \"{content[:100]}\" ({scan_result.get('detail', '')})"
             query_db(
-                "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, %s, %s, %s)",
-                (message_id, user_id, threat_type, alert_detail, 'high'), commit=True
+                "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (%s, %s, %s, %s, %s, %s, 'unread')",
+                (message_id, user_id, user_id, threat_type, alert_detail, 'high'), commit=True
             )
             log_action(user_id, 'AUTO_BLOCK_SUSPICIOUS', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for sending {threat_type} to '{receiver_name}': \"{content[:100]}\"")
             
@@ -436,8 +436,8 @@ def upload_file():
         
         alert_detail = f"User '{sender_name}' was AUTO-BLOCKED for uploading malicious file '{filename}' confirmed by VirusTotal scan."
         query_db(
-            "INSERT INTO alerts (message_id, user_id, threat_type, alert_detail, severity) VALUES (%s, %s, 'malicious_file', %s, 'high')",
-            (msg_id, user_id, alert_detail), commit=True
+            "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (%s, %s, %s, 'malicious_file', %s, 'high', 'unread')",
+            (msg_id, user_id, user_id, alert_detail), commit=True
         )
         log_action(user_id, 'AUTO_BLOCK_MALICIOUS_FILE', request.remote_addr, f"User '{sender_name}' (ID: {user_id}) was AUTO-BLOCKED for malicious file: '{filename}' (VirusTotal scan confirmed)")
         session.clear()
