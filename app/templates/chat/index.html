@@ -100,12 +100,17 @@
 
         <div class="contacts-list" id="contactsList">
             {% for group in groups %}
-            <div class="contact-item group-item" data-user-id="g-{{ group.group_id }}" data-username="{{ group.group_name }}" data-is-group="true" onclick="openChat({{ group.group_id }}, '{{ group.group_name }}', true)">
+            <div class="contact-item group-item" data-user-id="g-{{ group.group_id }}" data-username="{{ group.group_name }}" data-is-group="true" data-is-member="{{ 'true' if group.is_member else 'false' }}" onclick="openChat({{ group.group_id }}, '{{ group.group_name }}', true)">
                 <div class="contact-avatar group-avatar" style="background:#1A2B4C;color:#fff;">
                     <i class="fas fa-users" style="font-size:14px;"></i>
                 </div>
                 <div class="contact-info">
-                    <span class="contact-name">{{ group.group_name }}</span>
+                    <span class="contact-name">
+                        {{ group.group_name }}
+                        {% if not group.is_member %}
+                        <span class="badge-read-only" style="background:#f59e0b; color:white; font-size:9px; padding:2px 6px; border-radius:8px; margin-left:4px; font-weight:600; display:inline-flex; align-items:center; gap:2px;"><i class="fas fa-eye"></i> View Only</span>
+                        {% endif %}
+                    </span>
                     <span class="contact-preview" id="preview-g-{{ group.group_id }}">Group Chat</span>
                 </div>
                 <div class="contact-meta" style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">

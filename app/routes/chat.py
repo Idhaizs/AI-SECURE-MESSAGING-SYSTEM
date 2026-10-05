@@ -42,10 +42,10 @@ def index():
     users = query_db("SELECT user_id, username FROM users WHERE user_id != %s AND role = 'user' AND status = 'active'", (user_id,))
     
     groups = query_db("""
-        SELECT DISTINCT g.id as group_id, g.name as group_name, g.created_by_id, g.created_at 
+        SELECT DISTINCT g.id as group_id, g.name as group_name, g.created_by_id, g.created_at,
+               CASE WHEN gm.user_id IS NOT NULL THEN 1 ELSE 0 END as is_member
         FROM `groups` g
-        JOIN `group_members` gm ON g.id = gm.group_id
-        WHERE gm.user_id = %s
+        LEFT JOIN `group_members` gm ON g.id = gm.group_id AND gm.user_id = %s
         ORDER BY g.created_at DESC
     """, (user_id,))
     
@@ -62,8 +62,7 @@ def get_messages(receiver_id):
         if is_group:
             # Check group membership
             member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
-            if not member:
-                return jsonify({'error': 'Unauthorized group access'}), 403
+            is_member = True if member else False
 
             messages = query_db("""
                 SELECT gm.*, 
@@ -106,9 +105,10 @@ def get_messages(receiver_id):
                     'scan_result': msg.get('scan_result'),
                     'is_password_protected': 1 if msg.get('is_password_protected') == 1 else 0,
                     'is_group': True,
-                    'group_id': receiver_id
+                    'group_id': receiver_id,
+                    'is_member': is_member
                 })
-            return jsonify(result)
+            return jsonify({'messages': result, 'is_member': is_member})
 
         messages = query_db("""
             SELECT m.*, 
@@ -691,10 +691,10 @@ def create_group():
 def get_groups():
     user_id = session['user_id']
     groups = query_db("""
-        SELECT g.id as group_id, g.name as group_name, g.description, g.created_by_id, g.created_at 
+        SELECT DISTINCT g.id as group_id, g.name as group_name, g.description, g.created_by_id, g.created_at,
+               CASE WHEN gm.user_id IS NOT NULL THEN 1 ELSE 0 END as is_member
         FROM `groups` g
-        JOIN `group_members` gm ON g.id = gm.group_id
-        WHERE gm.user_id = %s
+        LEFT JOIN `group_members` gm ON g.id = gm.group_id AND gm.user_id = %s
         ORDER BY g.created_at DESC
     """, (user_id,))
     return jsonify(list(groups))
@@ -706,15 +706,13 @@ def get_groups():
 def get_group_details(group_id):
     user_id = session['user_id']
     
-    membership = query_db("SELECT role FROM `group_members` WHERE group_id = %s AND user_id = %s", (group_id, user_id), one=True)
-    if not membership:
-        return jsonify({'success': False, 'error': 'Access denied'}), 403
-        
     group = query_db("SELECT id, name, description, created_by_id, created_at FROM `groups` WHERE id = %s", (group_id,), one=True)
     if not group:
         return jsonify({'success': False, 'error': 'Group not found'}), 404
         
-    is_admin = (group['created_by_id'] == user_id) or (membership.get('role') == 'admin')
+    membership = query_db("SELECT role FROM `group_members` WHERE group_id = %s AND user_id = %s", (group_id, user_id), one=True)
+    is_member = bool(membership)
+    is_admin = (group['created_by_id'] == user_id) or (membership and membership.get('role') == 'admin')
     
     members = query_db("""
         SELECT u.user_id, u.username, gm.role, gm.joined_at

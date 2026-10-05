@@ -319,6 +319,28 @@ function openChat(userId, username, isGroup = false) {
     loadMessages(userId, currentIsGroup);
 }
 
+function updateChatInputPermission(isGroup, isMember) {
+    const inputRow = document.querySelector('.chat-input-area .input-row');
+    let readOnlyBanner = document.getElementById('readOnlyGroupBanner');
+    
+    if (isGroup && !isMember) {
+        if (inputRow) inputRow.style.display = 'none';
+        if (readOnlyBanner) {
+            readOnlyBanner.style.display = 'flex';
+        } else {
+            readOnlyBanner = document.createElement('div');
+            readOnlyBanner.id = 'readOnlyGroupBanner';
+            readOnlyBanner.style.cssText = 'display:flex; background:#fffbe8; color:#b45309; border:1px solid #fde68a; padding:12px 18px; border-radius:12px; margin:10px 16px; align-items:center; justify-content:center; font-size:13px; font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,0.05); gap:8px;';
+            readOnlyBanner.innerHTML = '<i class="fas fa-lock" style="color:#d97706; font-size:15px;"></i> <span><strong>View-Only Mode:</strong> You are viewing this group. You must be invited by a Group Admin to send messages.</span>';
+            const chatInputArea = document.querySelector('.chat-input-area');
+            if (chatInputArea) chatInputArea.appendChild(readOnlyBanner);
+        }
+    } else {
+        if (inputRow) inputRow.style.display = 'flex';
+        if (readOnlyBanner) readOnlyBanner.style.display = 'none';
+    }
+}
+
 // ─── Load Messages ────────────────────────────────────────────────
 async function loadMessages(userId, isGroup = false) {
     const area = document.getElementById('messagesArea');
@@ -334,11 +356,25 @@ async function loadMessages(userId, isGroup = false) {
             return;
         }
 
-        const messages = Array.isArray(data) ? data : [];
+        let messages = [];
+        let isMember = true;
+
+        if (Array.isArray(data)) {
+            messages = data;
+            if (messages.length > 0 && messages[0].is_member !== undefined) {
+                isMember = messages[0].is_member;
+            }
+        } else if (data && data.messages) {
+            messages = data.messages;
+            isMember = data.is_member !== undefined ? data.is_member : true;
+        }
+
+        updateChatInputPermission(isGroup, isMember);
+
         area.innerHTML = '';
 
         if (messages.length === 0) {
-            area.innerHTML = '<div class="loading-messages" style="color:#94a3b8">No messages yet. Start the conversation!</div>';
+            area.innerHTML = '<div class="loading-messages" style="color:#94a3b8">No messages yet.</div>';
             return;
         }
 
