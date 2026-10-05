@@ -59,6 +59,23 @@ function playNotificationSound() {
     }
 }
 
+function formatLocalTime(sentAtStr) {
+    if (!sentAtStr) return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    try {
+        let str = String(sentAtStr).trim();
+        if (!str.endsWith('Z') && !str.includes('+')) {
+            str = str.replace(' ', 'T') + 'Z';
+        }
+        const dateObj = new Date(str);
+        if (isNaN(dateObj.getTime())) {
+            return sentAtStr.includes(' ') ? sentAtStr.split(' ')[1].slice(0, 5) : sentAtStr;
+        }
+        return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch(e) {
+        return sentAtStr.includes(' ') ? sentAtStr.split(' ')[1].slice(0, 5) : sentAtStr;
+    }
+}
+
 function updateNavChatsBadge() {
     const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + (parseInt(b) || 0), 0);
     const navBadge = document.getElementById('navChatsBadge');
@@ -132,7 +149,7 @@ function updateContactPreview(targetId, previewText, timeStr, isUnread = false, 
 
     if (previewEl) previewEl.textContent = displayPreview;
     if (timeEl) {
-        const formattedTime = timeStr ? (timeStr.includes(' ') ? timeStr.split(' ')[1].slice(0, 5) : timeStr) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const formattedTime = formatLocalTime(timeStr);
         timeEl.textContent = formattedTime;
         if (isUnread) {
             timeEl.style.color = '#22c55e';
@@ -418,7 +435,7 @@ function createMessageEl(msg) {
         content = `<div class="bubble-content ${flaggedClass}">${escapeHtml(msg.content)}${threatTag ? '<br>' + threatTag : ''}</div>`;
     }
 
-    const time = msg.sent_at ? msg.sent_at.split(' ')[1].slice(0, 5) : '';
+    const time = formatLocalTime(msg.sent_at);
 
     // Action bar for Reply, Edit, Delete
     let actionsHtml = '';
