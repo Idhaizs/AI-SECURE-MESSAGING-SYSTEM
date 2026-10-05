@@ -22,8 +22,8 @@ class Config:
     
     # File Upload
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'app/static/uploads')
-    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))
-    ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp4', 'doc', 'docx', 'txt', 'zip'}
+    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 1024 * 1024 * 1024))
+    ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp4', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip', 'rar', 'csv'}
     
     # SocketIO
     SOCKETIO_ASYNC_MODE = 'eventlet'

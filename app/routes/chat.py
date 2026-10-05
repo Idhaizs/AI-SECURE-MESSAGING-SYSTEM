@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.utils import secure_filename
 from app.utils.db import query_db
 from app.utils.encryption import encrypt_message, decrypt_message, hash_file
-from app.utils.ai_detection import full_message_scan, check_file_extension, scan_file_virustotal
+from app.utils.ai_detection import full_message_scan, check_file_extension, scan_file_virustotal, inspect_file_content_ai
 from app.utils.audit import log_action
 from config import Config
 from functools import wraps
@@ -444,6 +444,30 @@ def upload_file():
         from flask import flash
         flash('🚫 Your account has been automatically suspended by Admin due to a security violation.', 'danger')
         return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': 'File blocked: detected as malicious by security scan. Account automatically suspended for security review.'}), 400
+    
+    # AI Deep Content Scan (Read text/links inside file)
+    ai_content_res = inspect_file_content_ai(file_path, filename)
+    if ai_content_res.get('is_suspicious'):
+        os.remove(file_path)
+        query_db("UPDATE users SET status = 'blocked' WHERE user_id = %s", (user_id,), commit=True)
+        
+        encrypted_suspicious_content = encrypt_message(f"🚫 AI Blocked File: {filename}")
+        msg_id = query_db(
+            "INSERT INTO messages (sender_id, receiver_id, encrypted_content, message_type, is_flagged, threat_type, message_id) VALUES (%s, %s, %s, 'file', 1, %s, 0)",
+            (user_id, receiver_id or 0, encrypted_suspicious_content, ai_content_res.get('threat_type', 'suspicious_attachment')), commit=True
+        )
+        query_db("UPDATE messages SET message_id = id WHERE id = %s", (msg_id,), commit=True)
+        
+        alert_detail = ai_content_res.get('detail', f"User '{sender_name}' uploaded suspicious content in file '{filename}'")
+        query_db(
+            "INSERT INTO alerts (message_id, user_id, triggered_by_id, threat_type, alert_detail, severity, status) VALUES (%s, %s, %s, %s, %s, 'high', 'unread')",
+            (msg_id, user_id, user_id, ai_content_res.get('threat_type', 'suspicious_attachment'), alert_detail), commit=True
+        )
+        log_action(user_id, 'AUTO_BLOCK_FILE_AI_THREAT', request.remote_addr, alert_detail)
+        session.clear()
+        from flask import flash
+        flash('🚫 Your account has been automatically suspended by System due to malicious content inside uploaded file.', 'danger')
+        return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': f"🚫 File Blocked: AI Deep Scan detected threat inside '{filename}'. Account suspended."}), 400
     
     is_group = request.form.get('is_group') in ['true', '1', 'True']
     

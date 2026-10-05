@@ -155,3 +155,31 @@ def full_message_scan(message: str) -> dict:
         'detail': gemini_result.get('reason', ''),
         'gemini_confirms': True
     }
+
+
+def inspect_file_content_ai(file_path: str, filename: str) -> dict:
+    ext = os.path.splitext(filename)[1].lower()
+    extracted_text = ""
+    
+    try:
+        if ext in ['.txt', '.log', '.csv', '.json', '.xml', '.html']:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                extracted_text = f.read(10000)
+        elif ext in ['.pdf', '.doc', '.docx', '.xls', '.xlsx']:
+            with open(file_path, 'rb') as f:
+                raw_bytes = f.read(25000)
+                printable_strings = re.findall(rb'[a-zA-Z0-9\s\.:/\?=\-_]{5,}', raw_bytes)
+                extracted_text = " ".join([s.decode('utf-8', errors='ignore') for s in printable_strings[:60]])
+    except Exception as e:
+        print(f"Error extracting file content for AI scan: {e}")
+        
+    if extracted_text and len(extracted_text.strip()) > 10:
+        scan_res = full_message_scan(extracted_text)
+        if scan_res.get('is_suspicious'):
+            return {
+                'is_suspicious': True,
+                'threat_type': scan_res.get('threat_type', 'suspicious_attachment'),
+                'detail': f"AI Deep File Scan detected threat inside '{filename}': {scan_res.get('detail', '')}"
+            }
+            
+    return {'is_suspicious': False, 'threat_type': 'none', 'detail': ''}
