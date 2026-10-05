@@ -44,8 +44,10 @@ def index():
     groups = query_db("""
         SELECT DISTINCT g.id as group_id, g.name as group_name, g.created_by_id, g.created_at 
         FROM `groups` g
+        JOIN `group_members` gm ON g.id = gm.group_id
+        WHERE gm.user_id = %s
         ORDER BY g.created_at DESC
-    """)
+    """, (user_id,))
     
     return render_template('chat/index.html', users=users, groups=groups or [])
 
@@ -58,10 +60,10 @@ def get_messages(receiver_id):
     
     try:
         if is_group:
-            # Auto-enroll user in group if not already member
+            # Check group membership
             member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
             if not member:
-                query_db("INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (%s, %s, 'member')", (receiver_id, user_id), commit=True)
+                return jsonify({'error': 'Unauthorized group access'}), 403
 
             messages = query_db("""
                 SELECT gm.*, 
@@ -208,7 +210,7 @@ def send_message():
         if is_group:
             member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
             if not member:
-                query_db("INSERT IGNORE INTO group_members (group_id, user_id, role) VALUES (%s, %s, 'member')", (receiver_id, user_id), commit=True)
+                return jsonify({'success': False, 'error': 'Unauthorized group access'}), 403
                 
             message_id = query_db(
                 "INSERT INTO group_messages (group_id, sender_id, encrypted_content, message_type, is_flagged, threat_type, sent_at) VALUES (%s, %s, %s, 'text', %s, %s, NOW())",
@@ -294,8 +296,6 @@ def send_message():
                 }
                 
                 members = query_db("SELECT DISTINCT user_id FROM group_members WHERE group_id = %s", (receiver_id,))
-                if not members:
-                    members = query_db("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'")
                 
                 for m in (members or []):
                     m_id = m['user_id']
@@ -470,6 +470,11 @@ def upload_file():
         return jsonify({'success': False, 'account_blocked': True, 'redirect': '/login', 'error': f"🚫 File Blocked: AI Deep Scan detected threat inside '{filename}'. Account suspended."}), 400
     
     is_group = request.form.get('is_group') in ['true', '1', 'True']
+    if is_group:
+        member = query_db("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (receiver_id, user_id), one=True)
+        if not member:
+            os.remove(file_path)
+            return jsonify({'success': False, 'error': 'Unauthorized group access'}), 403
     
     # Save message record
     encrypted_path = encrypt_message(file_path)
@@ -524,8 +529,6 @@ def upload_file():
             }
             
             members = query_db("SELECT DISTINCT user_id FROM group_members WHERE group_id = %s", (receiver_id,))
-            if not members:
-                members = query_db("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'")
             
             for m in (members or []):
                 m_id = m['user_id']
