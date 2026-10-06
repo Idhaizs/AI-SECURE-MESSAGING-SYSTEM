@@ -71,7 +71,7 @@ def get_messages(receiver_id):
                 FROM group_messages gm
                 JOIN users s ON gm.sender_id = s.user_id
                 LEFT JOIN files f ON (gm.file_id = f.file_id OR (gm.id = f.message_id AND gm.message_type = 'file'))
-                WHERE gm.group_id = %s AND (gm.is_deleted IS NULL OR gm.is_deleted = 0)
+                WHERE gm.group_id = %s AND (gm.is_deleted IS NULL OR gm.is_deleted = 0) AND (gm.is_flagged IS NULL OR gm.is_flagged = 0)
                 ORDER BY gm.id ASC
             """, (receiver_id,))
             
@@ -122,6 +122,7 @@ def get_messages(receiver_id):
             WHERE ((m.sender_id = %s AND m.receiver_id = %s)
                OR (m.sender_id = %s AND m.receiver_id = %s))
               AND (m.is_deleted IS NULL OR m.is_deleted = 0)
+              AND (m.is_flagged IS NULL OR m.is_flagged = 0)
             ORDER BY m.sent_at ASC, m.id ASC
         """, (user_id, receiver_id, receiver_id, user_id))
         
@@ -577,10 +578,9 @@ def download_file(file_id):
     if not file:
         return jsonify({'error': 'File not found'}), 404
     
-    uploader_id = file.get('uploader_id') or file.get('sender_id')
-    # Only sender or receiver (or admin) can access
-    if int(file['sender_id']) != int(user_id) and int(file['receiver_id']) != int(user_id) and session.get('role') != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
+    # Block download of flagged threat or malicious files for non-admin users
+    if file.get('scan_result') in ['blocked', 'malicious', 'suspicious'] and session.get('role') != 'admin':
+        return jsonify({'error': '🚫 File download blocked due to security threat policy.'}), 403
 
     filename = file.get('file_name') or file.get('original_filename') or 'file'
 

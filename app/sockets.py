@@ -52,6 +52,10 @@ def register_socket_events(socketio):
         receiver_id = data.get('receiver_id')
         message = data.get('message', {})
         
+        # Block delivery of flagged threat messages/files
+        if message.get('is_flagged'):
+            return
+        
         # Emit to receiver's room
         socketio.emit('new_message', message, to=f'user_{receiver_id}')
         # Echo back to sender
@@ -63,11 +67,13 @@ def register_socket_events(socketio):
         message = data.get('message', {})
         sender_id = session.get('user_id') or message.get('sender_id')
         
+        # Block delivery of flagged threat messages/files
+        if message.get('is_flagged'):
+            return
+            
         if group_id:
             try:
                 members = query_db("SELECT DISTINCT user_id FROM group_members WHERE group_id = %s", (group_id,))
-                if not members:
-                    members = query_db("SELECT user_id FROM users WHERE role = 'user' AND status = 'active'")
                 
                 for m in (members or []):
                     m_id = m['user_id']
@@ -77,7 +83,6 @@ def register_socket_events(socketio):
                 print(f"Socket group message error: {e}")
 
             socketio.emit('new_group_message', message, to=f'group_{group_id}')
-            socketio.emit('new_group_message', message)
 
     @socketio.on('typing')
     def on_typing(data):
