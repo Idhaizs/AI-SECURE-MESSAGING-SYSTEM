@@ -495,6 +495,7 @@ def export_audit_logs_csv():
     import csv
     from io import StringIO
     from flask import Response
+    from datetime import timedelta
     
     logs = query_db("""
         SELECT al.log_id, al.timestamp, u.username, al.action, al.ip_address, al.detail 
@@ -505,12 +506,13 @@ def export_audit_logs_csv():
     
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(['Log ID', 'Timestamp', 'Username', 'Action', 'IP Address', 'Details'])
+    cw.writerow(['Log ID', 'Timestamp (MYT UTC+8)', 'Username', 'Action', 'IP Address', 'Details'])
     
     for l in logs:
+        ts_str = (l['timestamp'] + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S') if l['timestamp'] else ''
         cw.writerow([
             l['log_id'],
-            l['timestamp'].strftime('%Y-%m-%d %H:%M:%S') if l['timestamp'] else '',
+            ts_str,
             l['username'] or 'System',
             l['action'],
             l['ip_address'] or '-',

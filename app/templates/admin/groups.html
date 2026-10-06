@@ -34,7 +34,7 @@
                                 <td><strong>{{ group.group_name }}</strong></td>
                                 <td>{{ group.creator_name or 'Admin/System' }}</td>
                                 <td><span class="threat-badge clean" style="background:#d1fae5;color:#065f46">{{ group.member_count }} Members</span></td>
-                                <td>{{ group.created_at.strftime('%d/%m/%Y %H:%M') if group.created_at else '-' }}</td>
+                                <td>{{ group.created_at|myt('%d/%m/%Y %H:%M') if group.created_at else '-' }}</td>
                                 <td>
                                     <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;cursor:pointer;padding:6px 12px;border-radius:6px;font-weight:600;" onclick="deleteGroup({{ group.group_id }})">
                                         <i class="fas fa-trash"></i> Delete Group

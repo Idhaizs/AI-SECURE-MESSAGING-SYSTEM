@@ -34,7 +34,7 @@
         </div>
         <div class="report-meta">
             <strong>OFFICIAL SECURITY AUDIT REPORT</strong><br>
-            Generated: {{ logs[0].timestamp.strftime('%Y-%m-%d %H:%M:%S') if logs else 'Now' }}<br>
+            Generated: {{ logs[0].timestamp|myt('%Y-%m-%d %H:%M:%S') if logs else 'Now' }}<br>
             Client: Salwa, Fairuz & Co.
         </div>
     </div>
@@ -55,7 +55,7 @@
             {% for log in logs %}
             <tr>
                 <td>#{{ log.log_id }}</td>
-                <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ log.timestamp|myt('%Y-%m-%d %H:%M:%S') }}</td>
                 <td><strong>{{ log.username or 'System' }}</strong></td>
                 <td><span class="badge">{{ log.action }}</span></td>
                 <td>{{ log.ip_address or '-' }}</td>

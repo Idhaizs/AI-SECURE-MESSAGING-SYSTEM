@@ -45,7 +45,7 @@
                                 <td>{{ user.email }}</td>
                                 <td><span class="threat-badge {{ user.role }}">{{ user.role.title() }}</span></td>
                                 <td><span class="status-badge {{ user.status }}" id="status-{{ user.id }}">{{ user.status.title() }}</span></td>
-                                <td>{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '-' }}</td>
+                                <td>{{ user.created_at|myt('%d/%m/%Y %H:%M') if user.created_at else '-' }}</td>
                                 <td style="display:flex;gap:6px;align-items:center;">
                                     {% if user.role != 'admin' %}
                                         {% if user.status == 'pending' %}

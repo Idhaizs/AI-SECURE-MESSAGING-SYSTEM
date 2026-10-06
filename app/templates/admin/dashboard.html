@@ -82,7 +82,7 @@
                                 <td>{{ msg.sender }}</td>
                                 <td>{{ msg.receiver }}</td>
                                 <td><span class="threat-badge {{ msg.threat_type }}">{{ msg.threat_type.replace('_', ' ').title() }}</span></td>
-                                <td>{{ msg.sent_at.strftime('%d/%m %H:%M') }}</td>
+                                <td>{{ msg.sent_at|myt('%d/%m %H:%M') }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -124,7 +124,7 @@
                             <div class="alert-content">
                                 <strong>{{ alert.username }}</strong>
                                 <span>{{ alert.threat_type.replace('_', ' ').title() if alert.threat_type else 'Alert' }}</span>
-                                <small>{{ alert.created_at.strftime('%d/%m %H:%M') if alert.created_at else 'Just now' }}</small>
+                                <small>{{ alert.created_at|myt('%d/%m %H:%M') if alert.created_at else 'Just now' }}</small>
                             </div>
                             <button class="resolve-btn" onclick="resolveAlert({{ alert.alert_id }}, this)">
                                 <i class="fas fa-check"></i>

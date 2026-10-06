@@ -41,7 +41,7 @@
                             </td>
                             <td><span class="threat-badge {{ alert.severity }}">{{ alert.severity.title() if alert.severity else 'High' }}</span></td>
                             <td><span class="status-badge {{ 'active' if alert.status == 'resolved' else 'blocked' }}" id="status-{{ alert.alert_id or alert.id }}">{{ alert.status.title() if alert.status else 'Unread' }}</span></td>
-                            <td>{{ alert.created_at.strftime('%d/%m %H:%M') if alert.created_at else '-' }}</td>
+                            <td>{{ alert.created_at|myt('%d/%m/%Y %H:%M') if alert.created_at else '-' }}</td>
                             <td style="display:flex;gap:6px;align-items:center;">
                                 {% if alert.status != 'resolved' %}
                                 <button class="toggle-btn unblock" onclick="resolveAlert('{{ alert.alert_id or alert.id }}')">Resolve</button>

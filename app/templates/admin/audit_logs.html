@@ -65,7 +65,7 @@
                         <tbody>
                         {% for log in logs %}
                         <tr class="log-row" id="log-row-{{ log.log_id }}" data-action="{{ log.action }}" data-user="{{ log.username or 'System' }}" data-detail="{{ log.detail or '' }}" data-ip="{{ log.ip_address or '' }}">
-                            <td style="white-space:nowrap">{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') if log.timestamp else '-' }}</td>
+                            <td style="white-space:nowrap">{{ log.timestamp|myt('%d/%m/%Y %H:%M:%S') if log.timestamp else '-' }}</td>
                             <td><strong>{{ log.username or 'System' }}</strong></td>
                             <td>
                                 {% if 'AUTO_BLOCK' in log.action or 'BLOCKED' in log.action %}
