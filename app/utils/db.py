@@ -51,6 +51,26 @@ def auto_migrate_database():
                 cursor.execute("ALTER TABLE group_messages ADD COLUMN sent_at DATETIME DEFAULT CURRENT_TIMESTAMP")
             if 'is_deleted' not in cols:
                 cursor.execute("ALTER TABLE group_messages ADD COLUMN is_deleted TINYINT(1) DEFAULT 0")
+            # Ensure tasks table exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `tasks` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `title` VARCHAR(255) NOT NULL,
+                    `description` TEXT NULL,
+                    `status` ENUM('todo', 'in_progress', 'review', 'completed') DEFAULT 'todo',
+                    `priority` ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+                    `assigned_to` INT NULL,
+                    `created_by` INT NOT NULL,
+                    `file_id` INT NULL,
+                    `due_date` DATETIME NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX (`status`),
+                    INDEX (`assigned_to`),
+                    INDEX (`created_by`),
+                    INDEX (`file_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
             conn.commit()
     except Exception as e:
         print(f"Auto-migration note: {e}")

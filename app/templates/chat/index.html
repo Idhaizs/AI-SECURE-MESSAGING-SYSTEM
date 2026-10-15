@@ -67,6 +67,10 @@
                 <i class="fas fa-calendar-alt"></i>
                 <span id="navCalendarBadge" style="display:none; position:absolute; top:4px; right:4px; background:#ef4444; color:white; font-size:10px; font-weight:800; border-radius:10px; min-width:16px; height:16px; align-items:center; justify-content:center; padding:0 3px;">0</span>
             </button>
+            <button class="sidebar-icon" id="navTasksBtn" title="Task & File Tracking Board" onclick="switchNav('tasks', this)" style="position:relative;">
+                <i class="fas fa-clipboard-check"></i>
+                <span id="navTasksBadge" style="display:none; position:absolute; top:4px; right:4px; background:#2563eb; color:white; font-size:10px; font-weight:800; border-radius:10px; min-width:16px; height:16px; align-items:center; justify-content:center; padding:0 3px;">0</span>
+            </button>
             <button class="sidebar-icon" id="navSettingsBtn" title="Settings" onclick="openUserSettingsModal()">
                 <i class="fas fa-cog"></i>
             </button>
@@ -331,6 +335,187 @@
             <div id="calendarMeetingsList" style="display:flex; flex-direction:column; gap:14px;">
                 <div style="text-align:center; color:#94a3b8; padding:40px;"><i class="fas fa-spinner fa-spin"></i> Loading meetings...</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Tasks & File Tracking Board Panel -->
+    <div class="main-panel" id="panel-tasks" style="display:none; flex-direction:column; flex:1; background:#f8fafc; height:100vh; overflow-y:auto; padding:24px 28px; box-sizing:border-box;">
+        <!-- Tasks Header -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; background:white; padding:18px 24px; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05); flex-wrap:wrap; gap:16px;">
+            <div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h2 style="margin:0; font-size:22px; font-weight:700; color:#1a2b4c;">📋 Task & File Tracking Board</h2>
+                    <span style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid #bae6fd;">Workflow Tracking</span>
+                </div>
+                <p style="margin:4px 0 0 0; font-size:13px; color:#64748b;">Track incoming files, monitor team assignments, and oversee case progress</p>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <!-- Search box -->
+                <div style="position:relative; width:220px;">
+                    <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:12px;"></i>
+                    <input type="text" id="taskSearchInput" placeholder="Search tasks or files..." oninput="debounceTaskSearch()" style="width:100%; padding:8px 12px 8px 32px; border:1px solid #cbd5e1; border-radius:20px; font-size:12px; outline:none; background:#f8fafc; box-sizing:border-box;">
+                </div>
+
+                <!-- Assignment Filter -->
+                <select id="taskFilterAssignee" onchange="loadTasks()" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; font-weight:600; color:#334155; background:white; cursor:pointer;">
+                    <option value="all">👥 All Tasks</option>
+                    <option value="assigned_me">👤 Assigned to Me</option>
+                    <option value="created_me">✍️ Created by Me</option>
+                </select>
+
+                <!-- Priority Filter -->
+                <select id="taskFilterPriority" onchange="loadTasks()" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; font-weight:600; color:#334155; background:white; cursor:pointer;">
+                    <option value="all">⚡ All Priorities</option>
+                    <option value="urgent">🔴 Urgent</option>
+                    <option value="high">🟠 High</option>
+                    <option value="medium">🔵 Medium</option>
+                    <option value="low">⚪ Low</option>
+                </select>
+
+                <!-- Display Mode Toggle -->
+                <div style="display:flex; background:#f1f5f9; border-radius:20px; padding:3px; border:1px solid #e2e8f0;">
+                    <button class="cal-mode-btn active" id="taskModeKanbanBtn" onclick="switchTaskDisplayMode('kanban')" style="border:none; background:#1a2b4c; color:white; padding:7px 14px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-columns"></i> Kanban
+                    </button>
+                    <button class="cal-mode-btn" id="taskModeTableBtn" onclick="switchTaskDisplayMode('table')" style="border:none; background:transparent; color:#64748b; padding:7px 14px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-list-ul"></i> Table
+                    </button>
+                </div>
+
+                <!-- Create Task Button -->
+                <button onclick="openCreateTaskModal()" style="background:#2563eb; color:white; border:none; padding:9px 18px; border-radius:10px; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px; box-shadow:0 2px 4px rgba(37,99,235,0.25); transition:all 0.15s;">
+                    <i class="fas fa-plus"></i> New Task
+                </button>
+            </div>
+        </div>
+
+        <!-- Quick Stats Cards -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:20px;">
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+                <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Total Tasks</span>
+                    <h3 id="statTotalTasks" style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#1e293b;">0</h3>
+                </div>
+                <div style="width:40px; height:40px; border-radius:10px; background:#eff6ff; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+            </div>
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 2px rgba(0,0,0,0.03); border-left:4px solid #f59e0b;">
+                <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">To-Do / Incoming</span>
+                    <h3 id="statTodoTasks" style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#d97706;">0</h3>
+                </div>
+                <div style="width:40px; height:40px; border-radius:10px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                    <i class="fas fa-inbox"></i>
+                </div>
+            </div>
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 2px rgba(0,0,0,0.03); border-left:4px solid #3b82f6;">
+                <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">In Progress</span>
+                    <h3 id="statProgressTasks" style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#2563eb;">0</h3>
+                </div>
+                <div style="width:40px; height:40px; border-radius:10px; background:#dbeafe; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                    <i class="fas fa-spinner"></i>
+                </div>
+            </div>
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 2px rgba(0,0,0,0.03); border-left:4px solid #8b5cf6;">
+                <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Under Review</span>
+                    <h3 id="statReviewTasks" style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#7c3aed;">0</h3>
+                </div>
+                <div style="width:40px; height:40px; border-radius:10px; background:#ede9fe; color:#7c3aed; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                    <i class="fas fa-search"></i>
+                </div>
+            </div>
+            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 2px rgba(0,0,0,0.03); border-left:4px solid #10b981;">
+                <div>
+                    <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Completed</span>
+                    <h3 id="statCompletedTasks" style="margin:4px 0 0 0; font-size:24px; font-weight:800; color:#059669;">0</h3>
+                </div>
+                <div style="width:40px; height:40px; border-radius:10px; background:#d1fae5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:16px;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kanban Board Grid View -->
+        <div id="tasksKanbanContainer" style="display:grid; grid-template-columns:repeat(4, minmax(280px, 1fr)); gap:18px; flex:1; align-items:flex-start; overflow-x:auto; padding-bottom:20px;">
+            <!-- 1. To-Do Column -->
+            <div class="kanban-col" id="col-todo" style="background:#f1f5f9; border-radius:14px; padding:16px; border:1px solid #e2e8f0; min-height:480px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#f59e0b;"></span>
+                        <h4 style="margin:0; font-size:14px; font-weight:700; color:#1e293b;">📥 To-Do / Incoming</h4>
+                    </div>
+                    <span class="kanban-count-badge" id="count-todo" style="background:#e2e8f0; color:#475569; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px;">0</span>
+                </div>
+                <div class="kanban-cards-area" id="cards-todo" style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- 2. In Progress Column -->
+            <div class="kanban-col" id="col-in_progress" style="background:#f1f5f9; border-radius:14px; padding:16px; border:1px solid #e2e8f0; min-height:480px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#3b82f6;"></span>
+                        <h4 style="margin:0; font-size:14px; font-weight:700; color:#1e293b;">⏳ In Progress</h4>
+                    </div>
+                    <span class="kanban-count-badge" id="count-in_progress" style="background:#e2e8f0; color:#475569; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px;">0</span>
+                </div>
+                <div class="kanban-cards-area" id="cards-in_progress" style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- 3. Review Column -->
+            <div class="kanban-col" id="col-review" style="background:#f1f5f9; border-radius:14px; padding:16px; border:1px solid #e2e8f0; min-height:480px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#8b5cf6;"></span>
+                        <h4 style="margin:0; font-size:14px; font-weight:700; color:#1e293b;">🔍 Under Review</h4>
+                    </div>
+                    <span class="kanban-count-badge" id="count-review" style="background:#e2e8f0; color:#475569; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px;">0</span>
+                </div>
+                <div class="kanban-cards-area" id="cards-review" style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- 4. Completed Column -->
+            <div class="kanban-col" id="col-completed" style="background:#f1f5f9; border-radius:14px; padding:16px; border:1px solid #e2e8f0; min-height:480px; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="width:10px; height:10px; border-radius:50%; background:#10b981;"></span>
+                        <h4 style="margin:0; font-size:14px; font-weight:700; color:#1e293b;">✅ Completed</h4>
+                    </div>
+                    <span class="kanban-count-badge" id="count-completed" style="background:#e2e8f0; color:#475569; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px;">0</span>
+                </div>
+                <div class="kanban-cards-area" id="cards-completed" style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Table View Container (Hidden by default) -->
+        <div id="tasksTableViewContainer" style="display:none; background:white; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.04); overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+                <thead style="background:#f8fafc; border-bottom:1px solid #e2e8f0; color:#475569; font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                    <tr>
+                        <th style="padding:14px 18px;">Priority</th>
+                        <th style="padding:14px 18px;">Status</th>
+                        <th style="padding:14px 18px;">Task Title</th>
+                        <th style="padding:14px 18px;">Assigned To</th>
+                        <th style="padding:14px 18px;">Attached File</th>
+                        <th style="padding:14px 18px;">Due Date</th>
+                        <th style="padding:14px 18px; text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tasksTableBody">
+                    <!-- JS populated -->
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -681,6 +866,124 @@
             <button id="submitEditMeetingBtn" onclick="submitUpdateMeeting()" style="padding:9px 20px; border:none; background:#1a2b4c; color:white; border-radius:8px; font-weight:600; cursor:pointer;">
                 <i class="fas fa-save"></i> Save Changes
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create / Edit Task -->
+<div class="modal" id="taskModal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.7); z-index:9999; backdrop-filter:blur(4px);">
+    <div class="modal-content" style="max-width:540px; width:90%; border-radius:16px; padding:24px; background:white; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:18px;">
+            <h3 id="taskModalTitle" style="margin:0; font-size:18px; font-weight:700; color:#1a2b4c;"><i class="fas fa-plus-circle" style="color:#2563eb; margin-right:8px;"></i> Create New Task / Case</h3>
+            <button onclick="closeTaskModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+        </div>
+
+        <input type="hidden" id="taskIdInput" value="">
+        <div style="display:flex; flex-direction:column; gap:14px; max-height:70vh; overflow-y:auto; padding-right:4px;">
+            <!-- Task Title -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Task / Case Title *</label>
+                <input type="text" id="taskTitleInput" placeholder="e.g. Review Agreement Contract / Client File #1024" required style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <!-- Priority and Status Row -->
+            <div style="display:flex; gap:12px;">
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Priority</label>
+                    <select id="taskPrioritySelect" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                        <option value="medium">🔵 Medium Priority</option>
+                        <option value="low">⚪ Low Priority</option>
+                        <option value="high">🟠 High Priority</option>
+                        <option value="urgent">🔴 Urgent Priority</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Workflow Status</label>
+                    <select id="taskStatusSelect" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                        <option value="todo">📥 To-Do / Incoming</option>
+                        <option value="in_progress">⏳ In Progress</option>
+                        <option value="review">🔍 Under Review</option>
+                        <option value="completed">✅ Completed</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Assigned To and Due Date Row -->
+            <div style="display:flex; gap:12px;">
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Assign To Team Member</label>
+                    <select id="taskAssigneeSelect" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                        <option value="">-- Unassigned --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Due Date & Time</label>
+                    <input type="datetime-local" id="taskDueDateInput" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <!-- Attach File from Chat / Uploads -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">
+                    <i class="fas fa-paperclip" style="color:#2563eb; margin-right:4px;"></i> Link File from Chat / Repository (Optional)
+                </label>
+                <select id="taskFileSelect" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:white; box-sizing:border-box;">
+                    <option value="">-- No Attached File --</option>
+                    <!-- Populated by JS -->
+                </select>
+                <small style="color:#64748b; font-size:11px; margin-top:3px; display:block;">Select a clean, scanned document or file received in chat to track with this task.</small>
+            </div>
+
+            <!-- Description / Notes -->
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Task Instructions / Notes</label>
+                <textarea id="taskDescriptionInput" rows="3" placeholder="Provide instructions, case details, or checklist items..." style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; resize:none; box-sizing:border-box;"></textarea>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px; border-top:1px solid #e2e8f0; padding-top:14px;">
+            <button onclick="closeTaskModal()" style="padding:9px 16px; border:1px solid #cbd5e1; background:white; color:#475569; border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+            <button id="submitTaskBtn" onclick="submitTaskForm()" style="padding:9px 20px; border:none; background:#2563eb; color:white; border-radius:8px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                <i class="fas fa-check"></i> <span id="submitTaskBtnText">Create Task</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: View Task Details -->
+<div class="modal" id="taskDetailModal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.7); z-index:9999; backdrop-filter:blur(4px);">
+    <div class="modal-content" style="max-width:540px; width:90%; border-radius:16px; padding:24px; background:white; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:18px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span id="detailTaskPriorityBadge" class="badge"></span>
+                <span id="detailTaskStatusBadge" class="badge"></span>
+            </div>
+            <button onclick="closeTaskDetailModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div id="taskDetailBody" style="display:flex; flex-direction:column; gap:14px;">
+            <!-- JS populated -->
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; border-top:1px solid #e2e8f0; padding-top:14px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <label style="font-size:12px; font-weight:600; color:#64748b;">Move Status:</label>
+                <select id="detailQuickStatusSelect" onchange="quickUpdateTaskStatusFromModal(this.value)" style="padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; font-weight:600; background:#f8fafc; cursor:pointer;">
+                    <option value="todo">📥 To-Do</option>
+                    <option value="in_progress">⏳ In Progress</option>
+                    <option value="review">🔍 Under Review</option>
+                    <option value="completed">✅ Completed</option>
+                </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button id="detailEditTaskBtn" onclick="editCurrentTaskFromDetail()" style="padding:7px 14px; border:1px solid #cbd5e1; background:white; color:#334155; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button id="detailDeleteTaskBtn" onclick="deleteCurrentTaskFromDetail()" style="padding:7px 14px; border:none; background:#fee2e2; color:#dc2626; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
         </div>
     </div>
 </div>

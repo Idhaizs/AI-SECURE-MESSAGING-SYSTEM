@@ -14,7 +14,7 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session or session.get('role') != 'user':
-            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/chat/meetings') or request.path.startswith('/chat/send') or request.path.startswith('/chat/upload'):
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/chat/meetings') or request.path.startswith('/chat/send') or request.path.startswith('/chat/upload') or request.path.startswith('/chat/tasks'):
                 return jsonify({'success': False, 'error': 'Session expired. Please log in again.', 'redirect': '/login'}), 401
             return redirect(url_for('auth.login'))
         
@@ -1129,3 +1129,246 @@ def update_meeting(meeting_id):
 
     log_action(user_id, 'UPDATE_MEETING', request.remote_addr, f"Meeting ID: {meeting_id}, Title: {title}")
     return jsonify({'success': True})
+
+
+# ─── Task & File Tracking Board Endpoints ─────────────────────────
+
+@chat_bp.route('/chat/tasks', methods=['GET'])
+@login_required
+def get_tasks():
+    user_id = session['user_id']
+    filter_mode = request.args.get('filter', 'all')  # 'all', 'assigned_me', 'created_me'
+    priority_filter = request.args.get('priority', 'all')
+    search_q = request.args.get('q', '').strip()
+
+    sql = """
+        SELECT t.*, 
+               u_assignee.username as assignee_name, u_assignee.full_name as assignee_fullname,
+               u_creator.username as creator_name, u_creator.full_name as creator_fullname,
+               f.file_name, f.file_id, f.file_path, f.scan_result, f.is_password_protected
+        FROM tasks t
+        LEFT JOIN users u_assignee ON t.assigned_to = u_assignee.user_id
+        LEFT JOIN users u_creator ON t.created_by = u_creator.user_id
+        LEFT JOIN files f ON t.file_id = f.file_id
+        WHERE 1=1
+    """
+    params = []
+
+    if filter_mode == 'assigned_me':
+        sql += " AND t.assigned_to = %s"
+        params.append(user_id)
+    elif filter_mode == 'created_me':
+        sql += " AND t.created_by = %s"
+        params.append(user_id)
+
+    if priority_filter and priority_filter != 'all':
+        sql += " AND t.priority = %s"
+        params.append(priority_filter)
+
+    if search_q:
+        sql += " AND (t.title LIKE %s OR t.description LIKE %s OR f.file_name LIKE %s)"
+        like_term = f"%{search_q}%"
+        params.extend([like_term, like_term, like_term])
+
+    sql += """
+        ORDER BY 
+            CASE t.priority
+                WHEN 'urgent' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 5
+            END,
+            t.due_date ASC,
+            t.id DESC
+    """
+
+    tasks = query_db(sql, tuple(params))
+    
+    formatted_tasks = []
+    counts = {'todo': 0, 'in_progress': 0, 'review': 0, 'completed': 0, 'total': 0}
+
+    from datetime import datetime, timedelta
+
+    for t in (tasks or []):
+        t_dict = dict(t)
+        st = t_dict.get('status') or 'todo'
+        if st in counts:
+            counts[st] += 1
+        counts['total'] += 1
+
+        due_val = t_dict.get('due_date')
+        if due_val and hasattr(due_val, 'strftime'):
+            t_dict['due_date_str'] = (due_val + timedelta(hours=8)).strftime('%d %b %Y, %I:%M %p')
+            t_dict['due_date_iso'] = due_val.strftime('%Y-%m-%dT%H:%M')
+            t_dict['is_overdue'] = bool(datetime.now() > due_val and st != 'completed')
+        else:
+            t_dict['due_date_str'] = None
+            t_dict['due_date_iso'] = ''
+            t_dict['is_overdue'] = False
+
+        created_val = t_dict.get('created_at')
+        if created_val and hasattr(created_val, 'strftime'):
+            t_dict['created_at_str'] = (created_val + timedelta(hours=8)).strftime('%d %b %Y')
+        else:
+            t_dict['created_at_str'] = '-'
+
+        t_dict['is_creator'] = (int(t_dict['created_by']) == int(user_id))
+        t_dict['is_assignee'] = (t_dict.get('assigned_to') and int(t_dict['assigned_to']) == int(user_id))
+
+        formatted_tasks.append(t_dict)
+
+    return jsonify({
+        'success': True,
+        'tasks': formatted_tasks,
+        'counts': counts,
+        'current_user_id': user_id
+    })
+
+
+@chat_bp.route('/chat/tasks/create', methods=['POST'])
+@login_required
+def create_task():
+    user_id = session['user_id']
+    data = request.get_json() or {}
+
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+    status = data.get('status', 'todo')
+    priority = data.get('priority', 'medium')
+    assigned_to = data.get('assigned_to')
+    file_id = data.get('file_id')
+    due_date = data.get('due_date', '').strip()
+
+    if not title:
+        return jsonify({'success': False, 'error': 'Task title is required'}), 400
+
+    if status not in ['todo', 'in_progress', 'review', 'completed']:
+        status = 'todo'
+    if priority not in ['low', 'medium', 'high', 'urgent']:
+        priority = 'medium'
+
+    assigned_to_val = int(assigned_to) if assigned_to and str(assigned_to).isdigit() else None
+    file_id_val = int(file_id) if file_id and str(file_id).isdigit() else None
+    due_date_val = due_date if due_date else None
+
+    task_id = query_db("""
+        INSERT INTO tasks (title, description, status, priority, assigned_to, created_by, file_id, due_date, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """, (title, description, status, priority, assigned_to_val, user_id, file_id_val, due_date_val), commit=True)
+
+    log_action(user_id, 'CREATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}")
+    return jsonify({'success': True, 'task_id': task_id, 'message': 'Task created successfully'})
+
+
+@chat_bp.route('/chat/tasks/<int:task_id>/update-status', methods=['POST'])
+@login_required
+def update_task_status(task_id):
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    new_status = data.get('status')
+
+    if new_status not in ['todo', 'in_progress', 'review', 'completed']:
+        return jsonify({'success': False, 'error': 'Invalid status'}), 400
+
+    task = query_db("SELECT id, title, created_by, assigned_to FROM tasks WHERE id = %s", (task_id,), one=True)
+    if not task:
+        return jsonify({'success': False, 'error': 'Task not found'}), 404
+
+    query_db("UPDATE tasks SET status = %s, updated_at = NOW() WHERE id = %s", (new_status, task_id), commit=True)
+    log_action(user_id, 'UPDATE_TASK_STATUS', request.remote_addr, f"Task ID: {task_id} status moved to: {new_status}")
+    return jsonify({'success': True, 'status': new_status})
+
+
+@chat_bp.route('/chat/tasks/<int:task_id>/update', methods=['POST'])
+@login_required
+def update_task_details(task_id):
+    user_id = session['user_id']
+    data = request.get_json() or {}
+
+    task = query_db("SELECT id, created_by FROM tasks WHERE id = %s", (task_id,), one=True)
+    if not task:
+        return jsonify({'success': False, 'error': 'Task not found'}), 404
+
+    title = data.get('title', '').strip()
+    if not title:
+        return jsonify({'success': False, 'error': 'Task title is required'}), 400
+
+    description = data.get('description', '').strip()
+    status = data.get('status', 'todo')
+    priority = data.get('priority', 'medium')
+    assigned_to = data.get('assigned_to')
+    file_id = data.get('file_id')
+    due_date = data.get('due_date', '').strip()
+
+    if status not in ['todo', 'in_progress', 'review', 'completed']:
+        status = 'todo'
+    if priority not in ['low', 'medium', 'high', 'urgent']:
+        priority = 'medium'
+
+    assigned_to_val = int(assigned_to) if assigned_to and str(assigned_to).isdigit() else None
+    file_id_val = int(file_id) if file_id and str(file_id).isdigit() else None
+    due_date_val = due_date if due_date else None
+
+    query_db("""
+        UPDATE tasks 
+        SET title = %s, description = %s, status = %s, priority = %s, 
+            assigned_to = %s, file_id = %s, due_date = %s, updated_at = NOW()
+        WHERE id = %s
+    """, (title, description, status, priority, assigned_to_val, file_id_val, due_date_val, task_id), commit=True)
+
+    log_action(user_id, 'UPDATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}")
+    return jsonify({'success': True})
+
+
+@chat_bp.route('/chat/tasks/<int:task_id>/delete', methods=['POST'])
+@login_required
+def delete_task(task_id):
+    user_id = session['user_id']
+    task = query_db("SELECT id, created_by, title FROM tasks WHERE id = %s", (task_id,), one=True)
+    if not task:
+        return jsonify({'success': False, 'error': 'Task not found'}), 404
+
+    query_db("DELETE FROM tasks WHERE id = %s", (task_id,), commit=True)
+    log_action(user_id, 'DELETE_TASK', request.remote_addr, f"Deleted Task ID: {task_id}")
+    return jsonify({'success': True})
+
+
+@chat_bp.route('/chat/tasks/available-files', methods=['GET'])
+@login_required
+def get_available_task_files():
+    user_id = session['user_id']
+    files = query_db("""
+        SELECT DISTINCT f.file_id, f.file_name, f.created_at, u.username as uploader_name
+        FROM files f
+        LEFT JOIN users u ON f.uploader_id = u.user_id
+        WHERE (f.uploader_id = %s OR f.receiver_id = %s OR %s IN (SELECT user_id FROM group_members WHERE group_id = f.receiver_id))
+          AND (f.scan_result IS NULL OR f.scan_result = 'clean')
+        ORDER BY f.created_at DESC LIMIT 50
+    """, (user_id, user_id, user_id))
+
+    from datetime import datetime, timedelta
+    res = []
+    for f in (files or []):
+        fd = dict(f)
+        cat = fd.get('created_at')
+        if cat and hasattr(cat, 'strftime'):
+            fd['created_at_str'] = (cat + timedelta(hours=8)).strftime('%d/%m/%Y %H:%M')
+        else:
+            fd['created_at_str'] = ''
+        res.append(fd)
+
+    return jsonify({'success': True, 'files': res})
+
+
+@chat_bp.route('/chat/tasks/members', methods=['GET'])
+@login_required
+def get_task_members():
+    members = query_db("""
+        SELECT user_id, username, full_name 
+        FROM users 
+        WHERE role = 'user' AND status = 'active' 
+        ORDER BY username ASC
+    """)
+    return jsonify({'success': True, 'members': list(members or [])})
+

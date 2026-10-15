@@ -281,7 +281,9 @@ function openChat(userId, username, isGroup = false) {
 
     const chatMain = document.getElementById('chatMain');
     const panelCalendar = document.getElementById('panel-calendar');
+    const panelTasks = document.getElementById('panel-tasks');
     if (panelCalendar) panelCalendar.style.display = 'none';
+    if (panelTasks) panelTasks.style.display = 'none';
     if (chatMain) chatMain.style.display = 'flex';
 
     if (currentIsGroup) {
@@ -473,7 +475,7 @@ function createMessageEl(msg) {
 
     const time = formatLocalTime(msg.sent_at);
 
-    // Action bar for Reply, Edit, Delete
+    // Action bar for Reply, Edit, Delete, Track as Task
     let actionsHtml = '';
     if (!msg.is_deleted) {
         const replyTextEscaped = escapeHtml(msg.content || msg.file_name || 'File').replace(/'/g, "\\'");
@@ -489,9 +491,17 @@ function createMessageEl(msg) {
             deleteBtn = `<button class="bubble-action-btn delete-btn" title="Delete" onclick="deleteMessageConfirm(${msgId})"><i class="fas fa-trash-alt"></i></button>`;
         }
 
+        let taskBtn = '';
+        if (msg.message_type === 'file') {
+            const fId = msg.file_id || msg.message_id || 0;
+            const fName = escapeHtml(msg.file_name || 'File').replace(/'/g, "\\'");
+            taskBtn = `<button class="bubble-action-btn" title="Track File as Task" onclick="createTaskFromFile(${fId}, '${fName}')"><i class="fas fa-clipboard-check"></i></button>`;
+        }
+
         actionsHtml = `
             <div class="bubble-action-bar">
                 <button class="bubble-action-btn" title="Reply" onclick="startReply(${msgId}, '${senderNameEscaped}', '${replyTextEscaped}')"><i class="fas fa-reply"></i></button>
+                ${taskBtn}
                 ${editBtn}
                 ${deleteBtn}
             </div>`;
@@ -1229,21 +1239,34 @@ function switchNav(type, sidebarBtn) {
         if (type === 'group') document.getElementById('navGroupsBtn')?.classList.add('active');
         if (type === 'favourite') document.getElementById('navStarredBtn')?.classList.add('active');
         if (type === 'calendar') document.getElementById('navCalendarBtn')?.classList.add('active');
+        if (type === 'tasks') document.getElementById('navTasksBtn')?.classList.add('active');
     }
 
     const chatMain = document.getElementById('chatMain');
     const panelCalendar = document.getElementById('panel-calendar');
+    const panelTasks = document.getElementById('panel-tasks');
 
     if (type === 'calendar') {
         if (chatMain) chatMain.style.display = 'none';
+        if (panelTasks) panelTasks.style.display = 'none';
         if (panelCalendar) {
             panelCalendar.style.display = 'flex';
             loadCalendarMeetings();
             const navCalBadge = document.getElementById('navCalendarBadge');
             if (navCalBadge) navCalBadge.style.display = 'none';
         }
+    } else if (type === 'tasks') {
+        if (chatMain) chatMain.style.display = 'none';
+        if (panelCalendar) panelCalendar.style.display = 'none';
+        if (panelTasks) {
+            panelTasks.style.display = 'flex';
+            loadTasks();
+            const navTasksBadge = document.getElementById('navTasksBadge');
+            if (navTasksBadge) navTasksBadge.style.display = 'none';
+        }
     } else {
         if (panelCalendar) panelCalendar.style.display = 'none';
+        if (panelTasks) panelTasks.style.display = 'none';
         if (chatMain) chatMain.style.display = 'flex';
 
         // Highlight filter pill
@@ -2143,3 +2166,540 @@ document.addEventListener('DOMContentLoaded', () => {
     loadUnreadCounts();
     loadCalendarUnreadBadge();
 });
+
+// ─── Task & File Tracking Board JavaScript ────────────────────────
+
+let currentTasksList = [];
+let currentTaskDetailId = null;
+let taskSearchDebounceTimer = null;
+let currentTaskDisplayMode = 'kanban';
+
+function debounceTaskSearch() {
+    clearTimeout(taskSearchDebounceTimer);
+    taskSearchDebounceTimer = setTimeout(() => {
+        loadTasks();
+    }, 300);
+}
+
+function switchTaskDisplayMode(mode) {
+    currentTaskDisplayMode = mode;
+    const kanbanBtn = document.getElementById('taskModeKanbanBtn');
+    const tableBtn = document.getElementById('taskModeTableBtn');
+    const kanbanCont = document.getElementById('tasksKanbanContainer');
+    const tableCont = document.getElementById('tasksTableViewContainer');
+
+    if (mode === 'kanban') {
+        if (kanbanBtn) { kanbanBtn.classList.add('active'); kanbanBtn.style.background = '#1a2b4c'; kanbanBtn.style.color = '#fff'; }
+        if (tableBtn) { tableBtn.classList.remove('active'); tableBtn.style.background = 'transparent'; tableBtn.style.color = '#64748b'; }
+        if (kanbanCont) kanbanCont.style.display = 'grid';
+        if (tableCont) tableCont.style.display = 'none';
+    } else {
+        if (tableBtn) { tableBtn.classList.add('active'); tableBtn.style.background = '#1a2b4c'; tableBtn.style.color = '#fff'; }
+        if (kanbanBtn) { kanbanBtn.classList.remove('active'); kanbanBtn.style.background = 'transparent'; kanbanBtn.style.color = '#64748b'; }
+        if (kanbanCont) kanbanCont.style.display = 'none';
+        if (tableCont) tableCont.style.display = 'block';
+    }
+}
+
+async function loadTasks() {
+    const assigneeFilter = document.getElementById('taskFilterAssignee')?.value || 'all';
+    const priorityFilter = document.getElementById('taskFilterPriority')?.value || 'all';
+    const searchQuery = document.getElementById('taskSearchInput')?.value.trim() || '';
+
+    const url = `/chat/tasks?filter=${encodeURIComponent(assigneeFilter)}&priority=${encodeURIComponent(priorityFilter)}&q=${encodeURIComponent(searchQuery)}`;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.success) {
+            console.error('Failed to load tasks:', data.error);
+            return;
+        }
+
+        currentTasksList = data.tasks || [];
+        const counts = data.counts || { todo: 0, in_progress: 0, review: 0, completed: 0, total: 0 };
+
+        // Update Stats
+        const statTotal = document.getElementById('statTotalTasks');
+        const statTodo = document.getElementById('statTodoTasks');
+        const statProgress = document.getElementById('statProgressTasks');
+        const statReview = document.getElementById('statReviewTasks');
+        const statCompleted = document.getElementById('statCompletedTasks');
+
+        if (statTotal) statTotal.textContent = counts.total;
+        if (statTodo) statTodo.textContent = counts.todo;
+        if (statProgress) statProgress.textContent = counts.in_progress;
+        if (statReview) statReview.textContent = counts.review;
+        if (statCompleted) statCompleted.textContent = counts.completed;
+
+        const countTodoEl = document.getElementById('count-todo');
+        const countProgEl = document.getElementById('count-in_progress');
+        const countRevEl = document.getElementById('count-review');
+        const countCompEl = document.getElementById('count-completed');
+
+        if (countTodoEl) countTodoEl.textContent = counts.todo;
+        if (countProgEl) countProgEl.textContent = counts.in_progress;
+        if (countRevEl) countRevEl.textContent = counts.review;
+        if (countCompEl) countCompEl.textContent = counts.completed;
+
+        // Render Kanban & Table
+        renderKanbanBoard(currentTasksList);
+        renderTasksTable(currentTasksList);
+
+    } catch (err) {
+        console.error('Error fetching tasks:', err);
+    }
+}
+
+function getPriorityBadgeInfo(priority) {
+    switch (priority) {
+        case 'urgent':
+            return { label: '🔴 Urgent', bg: '#fee2e2', color: '#dc2626', border: '#fecaca' };
+        case 'high':
+            return { label: '🟠 High', bg: '#ffedd5', color: '#ea580c', border: '#fed7aa' };
+        case 'medium':
+            return { label: '🔵 Medium', bg: '#dbeafe', color: '#2563eb', border: '#bfdbfe' };
+        case 'low':
+        default:
+            return { label: '⚪ Low', bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' };
+    }
+}
+
+function getStatusBadgeInfo(status) {
+    switch (status) {
+        case 'todo':
+            return { label: '📥 To-Do', bg: '#fef3c7', color: '#d97706', border: '#fde68a' };
+        case 'in_progress':
+            return { label: '⏳ In Progress', bg: '#dbeafe', color: '#2563eb', border: '#bfdbfe' };
+        case 'review':
+            return { label: '🔍 Under Review', bg: '#ede9fe', color: '#7c3aed', border: '#ddd6fe' };
+        case 'completed':
+            return { label: '✅ Completed', bg: '#d1fae5', color: '#059669', border: '#a7f3d0' };
+        default:
+            return { label: status, bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' };
+    }
+}
+
+function renderKanbanBoard(tasks) {
+    const columns = {
+        todo: document.getElementById('cards-todo'),
+        in_progress: document.getElementById('cards-in_progress'),
+        review: document.getElementById('cards-review'),
+        completed: document.getElementById('cards-completed')
+    };
+
+    // Reset columns
+    Object.keys(columns).forEach(k => {
+        if (columns[k]) columns[k].innerHTML = '';
+    });
+
+    tasks.forEach(task => {
+        const col = columns[task.status] || columns.todo;
+        if (col) {
+            col.appendChild(createKanbanCardElement(task));
+        }
+    });
+
+    // Check empty state for each column
+    Object.keys(columns).forEach(k => {
+        const col = columns[k];
+        if (col && col.children.length === 0) {
+            col.innerHTML = `
+                <div style="text-align:center; padding:32px 14px; color:#94a3b8; font-size:12px; background:rgba(255,255,255,0.6); border:1px dashed #cbd5e1; border-radius:10px;">
+                    <i class="fas fa-inbox" style="font-size:22px; display:block; margin-bottom:8px; opacity:0.6;"></i>
+                    No tasks in this stage
+                </div>`;
+        }
+    });
+}
+
+function createKanbanCardElement(task) {
+    const card = document.createElement('div');
+    card.className = 'kanban-task-card';
+    card.style.cssText = 'background:white; border-radius:12px; border:1px solid #e2e8f0; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.04); cursor:pointer; transition:all 0.15s ease; position:relative;';
+
+    card.onmouseover = () => { card.style.boxShadow = '0 6px 12px -2px rgba(0,0,0,0.08)'; card.style.borderColor = '#cbd5e1'; };
+    card.onmouseout = () => { card.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; card.style.borderColor = '#e2e8f0'; };
+
+    const pInfo = getPriorityBadgeInfo(task.priority);
+    const overdueBadge = task.is_overdue ? '<span style="background:#fee2e2; color:#dc2626; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; margin-left:6px;"><i class="fas fa-exclamation-circle"></i> Overdue</span>' : '';
+
+    // Attached file pill
+    let filePill = '';
+    if (task.file_name) {
+        filePill = `
+            <div style="margin:10px 0 6px 0; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between; font-size:11.5px; color:#0369a1;" onclick="event.stopPropagation(); window.open('/chat/download/${task.file_id}?download=1', '_blank');">
+                <div style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    <i class="fas fa-paperclip" style="color:#0284c7;"></i>
+                    <span style="font-weight:600; text-decoration:underline;">${escapeHtml(task.file_name)}</span>
+                </div>
+                <i class="fas fa-download" style="font-size:11px; margin-left:8px;" title="Download Attached File"></i>
+            </div>`;
+    }
+
+    // Assignee display
+    const assigneeText = task.assignee_fullname || task.assignee_name || 'Unassigned';
+    const assigneeInitial = (assigneeText !== 'Unassigned' ? assigneeText[0].toUpperCase() : '?');
+
+    // Next / Prev Status movement buttons
+    const statusOrder = ['todo', 'in_progress', 'review', 'completed'];
+    const curIdx = statusOrder.indexOf(task.status);
+    const prevStatus = curIdx > 0 ? statusOrder[curIdx - 1] : null;
+    const nextStatus = curIdx < statusOrder.length - 1 ? statusOrder[curIdx + 1] : null;
+
+    let quickMoveButtons = `
+        <div style="display:flex; align-items:center; gap:4px;" onclick="event.stopPropagation();">
+            ${prevStatus ? `<button onclick="quickUpdateTaskStatus(${task.id}, '${prevStatus}', event)" title="Move Backward" style="border:1px solid #cbd5e1; background:#f8fafc; color:#475569; width:24px; height:24px; border-radius:6px; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i class="fas fa-chevron-left"></i></button>` : ''}
+            ${nextStatus ? `<button onclick="quickUpdateTaskStatus(${task.id}, '${nextStatus}', event)" title="Move Forward" style="border:1px solid #cbd5e1; background:#f8fafc; color:#475569; width:24px; height:24px; border-radius:6px; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i class="fas fa-chevron-right"></i></button>` : ''}
+        </div>`;
+
+    card.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <div style="display:flex; align-items:center;">
+                <span style="background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px;">${pInfo.label}</span>
+                ${overdueBadge}
+            </div>
+            ${quickMoveButtons}
+        </div>
+
+        <h4 style="margin:0 0 6px 0; font-size:13.5px; font-weight:700; color:#1e293b; line-height:1.35;">${escapeHtml(task.title)}</h4>
+        
+        ${task.description ? `<p style="margin:0 0 8px 0; font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(task.description)}</p>` : ''}
+        
+        ${filePill}
+
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid #f1f5f9; font-size:11.5px; color:#64748b;">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <div style="width:22px; height:22px; border-radius:50%; background:#1a2b4c; color:white; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">
+                    ${assigneeInitial}
+                </div>
+                <span style="font-weight:600; color:#334155; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(assigneeText)}</span>
+            </div>
+            <div>
+                ${task.due_date_str ? `<span style="${task.is_overdue ? 'color:#dc2626; font-weight:700;' : ''}"><i class="far fa-calendar-alt" style="margin-right:3px;"></i>${task.due_date_str.split(',')[0]}</span>` : '<span style="color:#94a3b8;">No due date</span>'}
+            </div>
+        </div>
+    `;
+
+    card.onclick = () => openTaskDetail(task.id);
+    return card;
+}
+
+function renderTasksTable(tasks) {
+    const tbody = document.getElementById('tasksTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (tasks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;"><i class="fas fa-clipboard-list" style="font-size:24px; display:block; margin-bottom:8px;"></i>No tasks found. Click "New Task" to create one.</td></tr>`;
+        return;
+    }
+
+    tasks.forEach(task => {
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom:1px solid #f1f5f9; cursor:pointer; transition:background 0.15s;';
+        tr.onmouseover = () => { tr.style.background = '#f8fafc'; };
+        tr.onmouseout = () => { tr.style.background = 'white'; };
+
+        const pInfo = getPriorityBadgeInfo(task.priority);
+        const sInfo = getStatusBadgeInfo(task.status);
+        const assignee = task.assignee_fullname || task.assignee_name || 'Unassigned';
+
+        let fileHtml = '<span style="color:#94a3b8;">None</span>';
+        if (task.file_name) {
+            fileHtml = `<a href="/chat/download/${task.file_id}?download=1" target="_blank" onclick="event.stopPropagation();" style="color:#0284c7; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-paperclip"></i> ${escapeHtml(task.file_name.substring(0, 20))}</a>`;
+        }
+
+        tr.innerHTML = `
+            <td style="padding:14px 18px;"><span style="background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;">${pInfo.label}</span></td>
+            <td style="padding:14px 18px;"><span style="background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;">${sInfo.label}</span></td>
+            <td style="padding:14px 18px; font-weight:700; color:#1e293b;">${escapeHtml(task.title)}</td>
+            <td style="padding:14px 18px; color:#475569;"><i class="far fa-user" style="margin-right:4px;"></i>${escapeHtml(assignee)}</td>
+            <td style="padding:14px 18px;">${fileHtml}</td>
+            <td style="padding:14px 18px; color:#475569;">${task.due_date_str || '<span style="color:#94a3b8;">-</span>'}</td>
+            <td style="padding:14px 18px; text-align:right;">
+                <button onclick="event.stopPropagation(); editTask(${task.id});" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; margin-right:4px;"><i class="fas fa-edit"></i> Edit</button>
+                <button onclick="event.stopPropagation(); deleteTask(${task.id});" style="background:#fee2e2; border:none; color:#dc2626; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;"><i class="fas fa-trash"></i></button>
+            </td>
+        `;
+
+        tr.onclick = () => openTaskDetail(task.id);
+        tbody.appendChild(tr);
+    });
+}
+
+// ─── Task Modal Handlers ──────────────────────────────────────────
+
+async function loadTaskModalDropdowns(selectedAssigneeId = null, selectedFileId = null) {
+    try {
+        const [membersRes, filesRes] = await Promise.all([
+            fetch('/chat/tasks/members'),
+            fetch('/chat/tasks/available-files')
+        ]);
+        const membersData = await membersRes.json();
+        const filesData = await filesRes.json();
+
+        // Populate Assignee Select
+        const assigneeSelect = document.getElementById('taskAssigneeSelect');
+        if (assigneeSelect && membersData.success) {
+            assigneeSelect.innerHTML = '<option value="">-- Unassigned --</option>';
+            membersData.members.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.user_id;
+                opt.textContent = m.full_name ? `${m.full_name} (${m.username})` : m.username;
+                if (selectedAssigneeId && String(selectedAssigneeId) === String(m.user_id)) {
+                    opt.selected = true;
+                }
+                assigneeSelect.appendChild(opt);
+            });
+        }
+
+        // Populate Files Select
+        const fileSelect = document.getElementById('taskFileSelect');
+        if (fileSelect && filesData.success) {
+            fileSelect.innerHTML = '<option value="">-- No Attached File --</option>';
+            filesData.files.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.file_id;
+                opt.textContent = `📎 ${f.file_name} (${f.created_at_str || 'Recent'})`;
+                if (selectedFileId && String(selectedFileId) === String(f.file_id)) {
+                    opt.selected = true;
+                }
+                fileSelect.appendChild(opt);
+            });
+        }
+    } catch (err) {
+        console.error('Error loading task dropdowns:', err);
+    }
+}
+
+function openCreateTaskModal(prefillFileId = null, prefillFileName = null, prefillTitle = null) {
+    document.getElementById('taskIdInput').value = '';
+    document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-plus-circle" style="color:#2563eb; margin-right:8px;"></i> Create New Task / Case';
+    document.getElementById('submitTaskBtnText').textContent = 'Create Task';
+    
+    document.getElementById('taskTitleInput').value = prefillTitle || (prefillFileName ? `Process File: ${prefillFileName}` : '');
+    document.getElementById('taskDescriptionInput').value = '';
+    document.getElementById('taskPrioritySelect').value = 'medium';
+    document.getElementById('taskStatusSelect').value = 'todo';
+    document.getElementById('taskDueDateInput').value = '';
+
+    loadTaskModalDropdowns(null, prefillFileId);
+    document.getElementById('taskModal').style.display = 'flex';
+}
+
+function closeTaskModal() {
+    document.getElementById('taskModal').style.display = 'none';
+}
+
+function editTask(taskId) {
+    const task = currentTasksList.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    document.getElementById('taskIdInput').value = task.id;
+    document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-edit" style="color:#f59e0b; margin-right:8px;"></i> Edit Task / Case';
+    document.getElementById('submitTaskBtnText').textContent = 'Update Task';
+
+    document.getElementById('taskTitleInput').value = task.title || '';
+    document.getElementById('taskDescriptionInput').value = task.description || '';
+    document.getElementById('taskPrioritySelect').value = task.priority || 'medium';
+    document.getElementById('taskStatusSelect').value = task.status || 'todo';
+    document.getElementById('taskDueDateInput').value = task.due_date_iso || '';
+
+    loadTaskModalDropdowns(task.assigned_to, task.file_id);
+    document.getElementById('taskModal').style.display = 'flex';
+}
+
+async function submitTaskForm() {
+    const taskId = document.getElementById('taskIdInput').value.trim();
+    const title = document.getElementById('taskTitleInput').value.trim();
+    const description = document.getElementById('taskDescriptionInput').value.trim();
+    const priority = document.getElementById('taskPrioritySelect').value;
+    const status = document.getElementById('taskStatusSelect').value;
+    const assigned_to = document.getElementById('taskAssigneeSelect').value;
+    const file_id = document.getElementById('taskFileSelect').value;
+    const due_date = document.getElementById('taskDueDateInput').value;
+
+    if (!title) {
+        alert('Please enter a task title.');
+        return;
+    }
+
+    const payload = { title, description, priority, status, assigned_to, file_id, due_date };
+    const isEdit = Boolean(taskId);
+    const endpoint = isEdit ? `/chat/tasks/${taskId}/update` : '/chat/tasks/create';
+
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            closeTaskModal();
+            loadTasks();
+            showToast(isEdit ? 'Task updated successfully!' : 'Task created successfully!', 'success');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to save task.'));
+        }
+    } catch (err) {
+        alert('Server error saving task: ' + err.message);
+    }
+}
+
+// ─── Task Details Modal ───────────────────────────────────────────
+
+function openTaskDetail(taskId) {
+    const task = currentTasksList.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    currentTaskDetailId = task.id;
+
+    const pInfo = getPriorityBadgeInfo(task.priority);
+    const sInfo = getStatusBadgeInfo(task.status);
+
+    const pBadge = document.getElementById('detailTaskPriorityBadge');
+    pBadge.textContent = pInfo.label;
+    pBadge.style.cssText = `background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+
+    const sBadge = document.getElementById('detailTaskStatusBadge');
+    sBadge.textContent = sInfo.label;
+    sBadge.style.cssText = `background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+
+    document.getElementById('detailQuickStatusSelect').value = task.status;
+
+    let fileCard = '';
+    if (task.file_name) {
+        fileCard = `
+            <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fas fa-file-alt" style="font-size:24px; color:#0284c7;"></i>
+                    <div>
+                        <strong style="color:#0369a1; font-size:13px; display:block;">${escapeHtml(task.file_name)}</strong>
+                        <span style="font-size:11px; color:#64748b;">Attached from Secure Workspace</span>
+                    </div>
+                </div>
+                <a href="/chat/download/${task.file_id}?download=1" target="_blank" style="background:#0284c7; color:white; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fas fa-download"></i> Download
+                </a>
+            </div>`;
+    }
+
+    const assignee = task.assignee_fullname || task.assignee_name || 'Unassigned';
+    const creator = task.creator_fullname || task.creator_name || 'System';
+
+    document.getElementById('taskDetailBody').innerHTML = `
+        <h3 style="margin:0; font-size:17px; font-weight:700; color:#1e293b;">${escapeHtml(task.title)}</h3>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 16px; font-size:12px;">
+            <div>
+                <span style="color:#64748b; display:block; margin-bottom:2px;">Assigned Member:</span>
+                <strong style="color:#1e293b; display:flex; align-items:center; gap:6px;"><i class="fas fa-user-circle" style="color:#2563eb;"></i> ${escapeHtml(assignee)}</strong>
+            </div>
+            <div>
+                <span style="color:#64748b; display:block; margin-bottom:2px;">Due Date:</span>
+                <strong style="color:${task.is_overdue ? '#dc2626' : '#1e293b'};"><i class="far fa-clock" style="margin-right:4px;"></i>${task.due_date_str || 'No deadline'}</strong>
+            </div>
+            <div>
+                <span style="color:#64748b; display:block; margin-bottom:2px;">Created By:</span>
+                <span style="color:#334155;">${escapeHtml(creator)}</span>
+            </div>
+            <div>
+                <span style="color:#64748b; display:block; margin-bottom:2px;">Created On:</span>
+                <span style="color:#334155;">${task.created_at_str}</span>
+            </div>
+        </div>
+
+        ${task.description ? `
+            <div>
+                <label style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;">Task Description & Details:</label>
+                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; font-size:13px; color:#334155; line-height:1.5; white-space:pre-wrap;">${escapeHtml(task.description)}</div>
+            </div>` : ''}
+
+        ${fileCard}
+    `;
+
+    document.getElementById('taskDetailModal').style.display = 'flex';
+}
+
+function closeTaskDetailModal() {
+    document.getElementById('taskDetailModal').style.display = 'none';
+    currentTaskDetailId = null;
+}
+
+function editCurrentTaskFromDetail() {
+    const tid = currentTaskDetailId;
+    closeTaskDetailModal();
+    if (tid) editTask(tid);
+}
+
+function deleteCurrentTaskFromDetail() {
+    const tid = currentTaskDetailId;
+    if (!tid) return;
+    deleteTask(tid);
+    closeTaskDetailModal();
+}
+
+async function quickUpdateTaskStatus(taskId, newStatus, event) {
+    if (event) event.stopPropagation();
+    try {
+        const res = await fetch(`/chat/tasks/${taskId}/update-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+        const data = await res.json();
+        if (data.success) {
+            loadTasks();
+            showToast(`Task moved to ${newStatus.replace('_', ' ').toUpperCase()}`, 'info');
+        } else {
+            alert('Failed to update status: ' + data.error);
+        }
+    } catch (err) {
+        console.error('Error updating task status:', err);
+    }
+}
+
+async function quickUpdateTaskStatusFromModal(newStatus) {
+    if (!currentTaskDetailId) return;
+    await quickUpdateTaskStatus(currentTaskDetailId, newStatus);
+    const task = currentTasksList.find(t => t.id === currentTaskDetailId);
+    if (task) task.status = newStatus;
+    const sInfo = getStatusBadgeInfo(newStatus);
+    const sBadge = document.getElementById('detailTaskStatusBadge');
+    if (sBadge) {
+        sBadge.textContent = sInfo.label;
+        sBadge.style.cssText = `background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    }
+}
+
+async function deleteTask(taskId, event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Are you sure you want to delete this task?')) return;
+
+    try {
+        const res = await fetch(`/chat/tasks/${taskId}/delete`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (data.success) {
+            loadTasks();
+            showToast('Task deleted', 'warning');
+        } else {
+            alert('Failed to delete task: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error deleting task: ' + err.message);
+    }
+}
+
+function createTaskFromFile(fileId, fileName) {
+    switchNav('tasks');
+    setTimeout(() => {
+        openCreateTaskModal(fileId, fileName, `Process: ${fileName}`);
+    }, 200);
+}
+
