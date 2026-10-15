@@ -59,6 +59,7 @@ def auto_migrate_database():
                     `description` TEXT NULL,
                     `status` ENUM('todo', 'in_progress', 'review', 'completed') DEFAULT 'todo',
                     `priority` ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+                    `category` VARCHAR(50) DEFAULT 'General',
                     `assigned_to` INT NULL,
                     `created_by` INT NOT NULL,
                     `file_id` INT NULL,
@@ -66,11 +67,18 @@ def auto_migrate_database():
                     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     INDEX (`status`),
+                    INDEX (`category`),
                     INDEX (`assigned_to`),
                     INDEX (`created_by`),
                     INDEX (`file_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
+            # Check if category column already exists in tasks table
+            cursor.execute("SHOW COLUMNS FROM `tasks`")
+            task_cols = [c['Field'] if isinstance(c, dict) else c[0] for c in cursor.fetchall()]
+            if 'category' not in task_cols:
+                cursor.execute("ALTER TABLE `tasks` ADD COLUMN `category` VARCHAR(50) DEFAULT 'General' AFTER `priority`")
+                cursor.execute("ALTER TABLE `tasks` ADD INDEX (`category`)")
             conn.commit()
     except Exception as e:
         print(f"Auto-migration note: {e}")

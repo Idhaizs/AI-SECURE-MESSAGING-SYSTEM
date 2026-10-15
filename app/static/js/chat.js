@@ -2201,12 +2201,15 @@ function switchTaskDisplayMode(mode) {
     }
 }
 
+let draggedTaskId = null;
+
 async function loadTasks() {
     const assigneeFilter = document.getElementById('taskFilterAssignee')?.value || 'all';
     const priorityFilter = document.getElementById('taskFilterPriority')?.value || 'all';
+    const categoryFilter = document.getElementById('taskFilterCategory')?.value || 'all';
     const searchQuery = document.getElementById('taskSearchInput')?.value.trim() || '';
 
-    const url = `/chat/tasks?filter=${encodeURIComponent(assigneeFilter)}&priority=${encodeURIComponent(priorityFilter)}&q=${encodeURIComponent(searchQuery)}`;
+    const url = `/chat/tasks?filter=${encodeURIComponent(assigneeFilter)}&priority=${encodeURIComponent(priorityFilter)}&category=${encodeURIComponent(categoryFilter)}&q=${encodeURIComponent(searchQuery)}`;
 
     try {
         const res = await fetch(url);
@@ -2281,6 +2284,77 @@ function getStatusBadgeInfo(status) {
     }
 }
 
+function getCategoryBadgeInfo(category) {
+    switch (category) {
+        case 'Tax Filing':
+            return { label: 'Tax Filing', icon: 'fa-file-invoice-dollar', bg: '#fffbeb', color: '#b45309', border: '#fde68a' };
+        case 'Audit & Assurance':
+            return { label: 'Audit & Assurance', icon: 'fa-search-dollar', bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' };
+        case 'Annual Return':
+            return { label: 'Annual Return', icon: 'fa-building', bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' };
+        case 'Financial Statement':
+            return { label: 'Financial Statement', icon: 'fa-chart-line', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+        case 'Legal & Compliance':
+            return { label: 'Legal & Compliance', icon: 'fa-balance-scale', bg: '#fff1f2', color: '#be123c', border: '#fecdd3' };
+        case 'General':
+        default:
+            return { label: 'General Case', icon: 'fa-folder', bg: '#f8fafc', color: '#475569', border: '#e2e8f0' };
+    }
+}
+
+// ─── Drag and Drop Handlers for Kanban ────────────────────────────
+
+function handleKanbanDragStart(e, taskId) {
+    draggedTaskId = taskId;
+    e.dataTransfer.setData('text/plain', String(taskId));
+    e.dataTransfer.effectAllowed = 'move';
+    if (e.target && e.target.classList) {
+        e.target.classList.add('is-dragging');
+    }
+}
+
+function handleKanbanDragEnd(e) {
+    if (e.target && e.target.classList) {
+        e.target.classList.remove('is-dragging');
+    }
+    document.querySelectorAll('.kanban-col').forEach(col => col.classList.remove('drag-over'));
+    draggedTaskId = null;
+}
+
+function handleKanbanDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const col = e.currentTarget;
+    if (col && !col.classList.contains('drag-over')) {
+        col.classList.add('drag-over');
+    }
+}
+
+function handleKanbanDragLeave(e) {
+    const col = e.currentTarget;
+    if (col && !col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+    }
+}
+
+async function handleKanbanDrop(e, targetStatus) {
+    e.preventDefault();
+    const col = e.currentTarget;
+    if (col) col.classList.remove('drag-over');
+
+    const taskIdStr = e.dataTransfer.getData('text/plain') || String(draggedTaskId || '');
+    if (!taskIdStr) return;
+    const taskId = parseInt(taskIdStr);
+
+    const task = currentTasksList.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (task.status === targetStatus) return; // No change
+
+    // Immediate status update
+    await quickUpdateTaskStatus(taskId, targetStatus);
+}
+
 function renderKanbanBoard(tasks) {
     const columns = {
         todo: document.getElementById('cards-todo'),
@@ -2308,7 +2382,7 @@ function renderKanbanBoard(tasks) {
             col.innerHTML = `
                 <div style="text-align:center; padding:32px 14px; color:#94a3b8; font-size:12px; background:rgba(255,255,255,0.6); border:1px dashed #cbd5e1; border-radius:10px;">
                     <i class="fas fa-inbox" style="font-size:22px; display:block; margin-bottom:8px; opacity:0.6;"></i>
-                    No tasks in this stage
+                    No cases in this stage<br><small style="color:#cbd5e1;">Drag cards here</small>
                 </div>`;
         }
     });
@@ -2317,12 +2391,17 @@ function renderKanbanBoard(tasks) {
 function createKanbanCardElement(task) {
     const card = document.createElement('div');
     card.className = 'kanban-task-card';
-    card.style.cssText = 'background:white; border-radius:12px; border:1px solid #e2e8f0; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.04); cursor:pointer; transition:all 0.15s ease; position:relative;';
+    card.draggable = true;
+    card.dataset.taskId = task.id;
+    card.dataset.taskStatus = task.status;
 
-    card.onmouseover = () => { card.style.boxShadow = '0 6px 12px -2px rgba(0,0,0,0.08)'; card.style.borderColor = '#cbd5e1'; };
-    card.onmouseout = () => { card.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; card.style.borderColor = '#e2e8f0'; };
+    // Drag event bindings
+    card.ondragstart = (e) => handleKanbanDragStart(e, task.id);
+    card.ondragend = (e) => handleKanbanDragEnd(e);
 
     const pInfo = getPriorityBadgeInfo(task.priority);
+    const catInfo = getCategoryBadgeInfo(task.category || 'General');
+    const caseId = `#CASE-${String(task.id).padStart(4, '0')}`;
     const overdueBadge = task.is_overdue ? '<span style="background:#fee2e2; color:#dc2626; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; margin-left:6px;"><i class="fas fa-exclamation-circle"></i> Overdue</span>' : '';
 
     // Attached file pill
@@ -2356,14 +2435,16 @@ function createKanbanCardElement(task) {
 
     card.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-            <div style="display:flex; align-items:center;">
-                <span style="background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px;">${pInfo.label}</span>
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span class="case-id-badge">${caseId}</span>
+                <span class="category-badge" style="background:${catInfo.bg}; color:${catInfo.color}; border:1px solid ${catInfo.border};"><i class="fas ${catInfo.icon}"></i> ${catInfo.label}</span>
+                <span style="background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:10px;">${pInfo.label}</span>
                 ${overdueBadge}
             </div>
             ${quickMoveButtons}
         </div>
 
-        <h4 style="margin:0 0 6px 0; font-size:13.5px; font-weight:700; color:#1e293b; line-height:1.35;">${escapeHtml(task.title)}</h4>
+        <h4 style="margin:4px 0 6px 0; font-size:13.5px; font-weight:700; color:#1e293b; line-height:1.35;">${escapeHtml(task.title)}</h4>
         
         ${task.description ? `<p style="margin:0 0 8px 0; font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(task.description)}</p>` : ''}
         
@@ -2371,10 +2452,10 @@ function createKanbanCardElement(task) {
 
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid #f1f5f9; font-size:11.5px; color:#64748b;">
             <div style="display:flex; align-items:center; gap:6px;">
-                <div style="width:22px; height:22px; border-radius:50%; background:#1a2b4c; color:white; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">
+                <div style="width:22px; height:22px; border-radius:50%; background:#1a2b4c; color:white; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;" title="Assignee: ${escapeHtml(assigneeText)}">
                     ${assigneeInitial}
                 </div>
-                <span style="font-weight:600; color:#334155; max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(assigneeText)}</span>
+                <span style="font-weight:600; color:#334155; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(assigneeText)}</span>
             </div>
             <div>
                 ${task.due_date_str ? `<span style="${task.is_overdue ? 'color:#dc2626; font-weight:700;' : ''}"><i class="far fa-calendar-alt" style="margin-right:3px;"></i>${task.due_date_str.split(',')[0]}</span>` : '<span style="color:#94a3b8;">No due date</span>'}
@@ -2392,7 +2473,7 @@ function renderTasksTable(tasks) {
     tbody.innerHTML = '';
 
     if (tasks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;"><i class="fas fa-clipboard-list" style="font-size:24px; display:block; margin-bottom:8px;"></i>No tasks found. Click "New Task" to create one.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color:#94a3b8;"><i class="fas fa-clipboard-list" style="font-size:24px; display:block; margin-bottom:8px;"></i>No cases or tasks found. Click "New Task / Case" to create one.</td></tr>`;
         return;
     }
 
@@ -2404,6 +2485,8 @@ function renderTasksTable(tasks) {
 
         const pInfo = getPriorityBadgeInfo(task.priority);
         const sInfo = getStatusBadgeInfo(task.status);
+        const catInfo = getCategoryBadgeInfo(task.category || 'General');
+        const caseId = `#CASE-${String(task.id).padStart(4, '0')}`;
         const assignee = task.assignee_fullname || task.assignee_name || 'Unassigned';
 
         let fileHtml = '<span style="color:#94a3b8;">None</span>';
@@ -2412,7 +2495,9 @@ function renderTasksTable(tasks) {
         }
 
         tr.innerHTML = `
+            <td style="padding:14px 18px;"><span class="case-id-badge">${caseId}</span></td>
             <td style="padding:14px 18px;"><span style="background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;">${pInfo.label}</span></td>
+            <td style="padding:14px 18px;"><span class="category-badge" style="background:${catInfo.bg}; color:${catInfo.color}; border:1px solid ${catInfo.border};"><i class="fas ${catInfo.icon}"></i> ${catInfo.label}</span></td>
             <td style="padding:14px 18px;"><span style="background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;">${sInfo.label}</span></td>
             <td style="padding:14px 18px; font-weight:700; color:#1e293b;">${escapeHtml(task.title)}</td>
             <td style="padding:14px 18px; color:#475569;"><i class="far fa-user" style="margin-right:4px;"></i>${escapeHtml(assignee)}</td>
@@ -2474,7 +2559,7 @@ async function loadTaskModalDropdowns(selectedAssigneeId = null, selectedFileId 
     }
 }
 
-function openCreateTaskModal(prefillFileId = null, prefillFileName = null, prefillTitle = null) {
+function openCreateTaskModal(prefillFileId = null, prefillFileName = null, prefillTitle = null, prefillCategory = null) {
     document.getElementById('taskIdInput').value = '';
     document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-plus-circle" style="color:#2563eb; margin-right:8px;"></i> Create New Task / Case';
     document.getElementById('submitTaskBtnText').textContent = 'Create Task';
@@ -2483,6 +2568,7 @@ function openCreateTaskModal(prefillFileId = null, prefillFileName = null, prefi
     document.getElementById('taskDescriptionInput').value = '';
     document.getElementById('taskPrioritySelect').value = 'medium';
     document.getElementById('taskStatusSelect').value = 'todo';
+    document.getElementById('taskCategorySelect').value = prefillCategory || 'General';
     document.getElementById('taskDueDateInput').value = '';
 
     loadTaskModalDropdowns(null, prefillFileId);
@@ -2498,13 +2584,14 @@ function editTask(taskId) {
     if (!task) return;
 
     document.getElementById('taskIdInput').value = task.id;
-    document.getElementById('taskModalTitle').innerHTML = '<i class="fas fa-edit" style="color:#f59e0b; margin-right:8px;"></i> Edit Task / Case';
-    document.getElementById('submitTaskBtnText').textContent = 'Update Task';
+    document.getElementById('taskModalTitle').innerHTML = `<i class="fas fa-edit" style="color:#f59e0b; margin-right:8px;"></i> Edit Case #CASE-${String(task.id).padStart(4, '0')}`;
+    document.getElementById('submitTaskBtnText').textContent = 'Update Case';
 
     document.getElementById('taskTitleInput').value = task.title || '';
     document.getElementById('taskDescriptionInput').value = task.description || '';
     document.getElementById('taskPrioritySelect').value = task.priority || 'medium';
     document.getElementById('taskStatusSelect').value = task.status || 'todo';
+    document.getElementById('taskCategorySelect').value = task.category || 'General';
     document.getElementById('taskDueDateInput').value = task.due_date_iso || '';
 
     loadTaskModalDropdowns(task.assigned_to, task.file_id);
@@ -2517,16 +2604,17 @@ async function submitTaskForm() {
     const description = document.getElementById('taskDescriptionInput').value.trim();
     const priority = document.getElementById('taskPrioritySelect').value;
     const status = document.getElementById('taskStatusSelect').value;
+    const category = document.getElementById('taskCategorySelect').value;
     const assigned_to = document.getElementById('taskAssigneeSelect').value;
     const file_id = document.getElementById('taskFileSelect').value;
     const due_date = document.getElementById('taskDueDateInput').value;
 
     if (!title) {
-        alert('Please enter a task title.');
+        alert('Please enter a task / case title.');
         return;
     }
 
-    const payload = { title, description, priority, status, assigned_to, file_id, due_date };
+    const payload = { title, description, priority, status, category, assigned_to, file_id, due_date };
     const isEdit = Boolean(taskId);
     const endpoint = isEdit ? `/chat/tasks/${taskId}/update` : '/chat/tasks/create';
 
@@ -2541,7 +2629,7 @@ async function submitTaskForm() {
         if (data.success) {
             closeTaskModal();
             loadTasks();
-            showToast(isEdit ? 'Task updated successfully!' : 'Task created successfully!', 'success');
+            showToast(isEdit ? 'Case updated successfully!' : 'New Case created successfully!', 'success');
         } else {
             alert('Error: ' + (data.error || 'Failed to save task.'));
         }
@@ -2560,14 +2648,30 @@ function openTaskDetail(taskId) {
 
     const pInfo = getPriorityBadgeInfo(task.priority);
     const sInfo = getStatusBadgeInfo(task.status);
+    const catInfo = getCategoryBadgeInfo(task.category || 'General');
+
+    const caseIdEl = document.getElementById('detailTaskCaseId');
+    if (caseIdEl) {
+        caseIdEl.textContent = `#CASE-${String(task.id).padStart(4, '0')}`;
+    }
+
+    const catBadge = document.getElementById('detailTaskCategoryBadge');
+    if (catBadge) {
+        catBadge.innerHTML = `<i class="fas ${catInfo.icon}"></i> ${catInfo.label}`;
+        catBadge.style.cssText = `background:${catInfo.bg}; color:${catInfo.color}; border:1px solid ${catInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    }
 
     const pBadge = document.getElementById('detailTaskPriorityBadge');
-    pBadge.textContent = pInfo.label;
-    pBadge.style.cssText = `background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    if (pBadge) {
+        pBadge.textContent = pInfo.label;
+        pBadge.style.cssText = `background:${pInfo.bg}; color:${pInfo.color}; border:1px solid ${pInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    }
 
     const sBadge = document.getElementById('detailTaskStatusBadge');
-    sBadge.textContent = sInfo.label;
-    sBadge.style.cssText = `background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    if (sBadge) {
+        sBadge.textContent = sInfo.label;
+        sBadge.style.cssText = `background:${sInfo.bg}; color:${sInfo.color}; border:1px solid ${sInfo.border}; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px;`;
+    }
 
     document.getElementById('detailQuickStatusSelect').value = task.status;
 
@@ -2608,14 +2712,14 @@ function openTaskDetail(taskId) {
                 <span style="color:#334155;">${escapeHtml(creator)}</span>
             </div>
             <div>
-                <span style="color:#64748b; display:block; margin-bottom:2px;">Created On:</span>
-                <span style="color:#334155;">${task.created_at_str}</span>
+                <span style="color:#64748b; display:block; margin-bottom:2px;">Case Category:</span>
+                <span style="color:#1e293b; font-weight:600;"><i class="fas ${catInfo.icon}" style="color:${catInfo.color}; margin-right:4px;"></i>${catInfo.label}</span>
             </div>
         </div>
 
         ${task.description ? `
             <div>
-                <label style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;">Task Description & Details:</label>
+                <label style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;">Case Instructions & Checklist:</label>
                 <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; font-size:13px; color:#334155; line-height:1.5; white-space:pre-wrap;">${escapeHtml(task.description)}</div>
             </div>` : ''}
 
@@ -2654,7 +2758,7 @@ async function quickUpdateTaskStatus(taskId, newStatus, event) {
         const data = await res.json();
         if (data.success) {
             loadTasks();
-            showToast(`Task moved to ${newStatus.replace('_', ' ').toUpperCase()}`, 'info');
+            showToast(`Case moved to ${newStatus.replace('_', ' ').toUpperCase()}`, 'info');
         } else {
             alert('Failed to update status: ' + data.error);
         }
@@ -2678,7 +2782,7 @@ async function quickUpdateTaskStatusFromModal(newStatus) {
 
 async function deleteTask(taskId, event) {
     if (event) event.stopPropagation();
-    if (!confirm('Are you sure you want to delete this task?')) return;
+    if (!confirm('Are you sure you want to delete this case/task?')) return;
 
     try {
         const res = await fetch(`/chat/tasks/${taskId}/delete`, {
@@ -2687,7 +2791,7 @@ async function deleteTask(taskId, event) {
         const data = await res.json();
         if (data.success) {
             loadTasks();
-            showToast('Task deleted', 'warning');
+            showToast('Case deleted', 'warning');
         } else {
             alert('Failed to delete task: ' + data.error);
         }
@@ -2698,8 +2802,22 @@ async function deleteTask(taskId, event) {
 
 function createTaskFromFile(fileId, fileName) {
     switchNav('tasks');
+    
+    // Smart Category detection from filename
+    let detectedCat = 'General';
+    const fn = (fileName || '').toLowerCase();
+    if (fn.includes('tax') || fn.includes('cukai') || fn.includes('lhdn') || fn.includes('form_b')) {
+        detectedCat = 'Tax Filing';
+    } else if (fn.includes('audit') || fn.includes('penyata') || fn.includes('financial') || fn.includes('balance') || fn.includes('ledger') || fn.includes('invoice')) {
+        detectedCat = 'Financial Statement';
+    } else if (fn.includes('annual') || fn.includes('ssm') || fn.includes('return') || fn.includes('borang')) {
+        detectedCat = 'Annual Return';
+    } else if (fn.includes('agree') || fn.includes('contract') || fn.includes('legal') || fn.includes('nda') || fn.includes('mou')) {
+        detectedCat = 'Legal & Compliance';
+    }
+
     setTimeout(() => {
-        openCreateTaskModal(fileId, fileName, `Process: ${fileName}`);
+        openCreateTaskModal(fileId, fileName, `Review: ${fileName}`, detectedCat);
     }, 200);
 }
 

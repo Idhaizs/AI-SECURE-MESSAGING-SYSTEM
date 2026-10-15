@@ -1139,6 +1139,7 @@ def get_tasks():
     user_id = session['user_id']
     filter_mode = request.args.get('filter', 'all')  # 'all', 'assigned_me', 'created_me'
     priority_filter = request.args.get('priority', 'all')
+    category_filter = request.args.get('category', 'all')
     search_q = request.args.get('q', '').strip()
 
     sql = """
@@ -1165,10 +1166,14 @@ def get_tasks():
         sql += " AND t.priority = %s"
         params.append(priority_filter)
 
+    if category_filter and category_filter != 'all':
+        sql += " AND t.category = %s"
+        params.append(category_filter)
+
     if search_q:
-        sql += " AND (t.title LIKE %s OR t.description LIKE %s OR f.file_name LIKE %s)"
+        sql += " AND (t.title LIKE %s OR t.description LIKE %s OR t.category LIKE %s OR f.file_name LIKE %s)"
         like_term = f"%{search_q}%"
-        params.extend([like_term, like_term, like_term])
+        params.extend([like_term, like_term, like_term, like_term])
 
     sql += """
         ORDER BY 
@@ -1196,6 +1201,9 @@ def get_tasks():
         if st in counts:
             counts[st] += 1
         counts['total'] += 1
+
+        t_dict['case_code'] = f"CASE-{t_dict['id']:04d}"
+        t_dict['category'] = t_dict.get('category') or 'General'
 
         due_val = t_dict.get('due_date')
         if due_val and hasattr(due_val, 'strftime'):
@@ -1236,6 +1244,7 @@ def create_task():
     description = data.get('description', '').strip()
     status = data.get('status', 'todo')
     priority = data.get('priority', 'medium')
+    category = data.get('category', 'General').strip() or 'General'
     assigned_to = data.get('assigned_to')
     file_id = data.get('file_id')
     due_date = data.get('due_date', '').strip()
@@ -1253,11 +1262,11 @@ def create_task():
     due_date_val = due_date if due_date else None
 
     task_id = query_db("""
-        INSERT INTO tasks (title, description, status, priority, assigned_to, created_by, file_id, due_date, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-    """, (title, description, status, priority, assigned_to_val, user_id, file_id_val, due_date_val), commit=True)
+        INSERT INTO tasks (title, description, status, priority, category, assigned_to, created_by, file_id, due_date, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    """, (title, description, status, priority, category, assigned_to_val, user_id, file_id_val, due_date_val), commit=True)
 
-    log_action(user_id, 'CREATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}")
+    log_action(user_id, 'CREATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}, Category: {category}")
     return jsonify({'success': True, 'task_id': task_id, 'message': 'Task created successfully'})
 
 
@@ -1297,6 +1306,7 @@ def update_task_details(task_id):
     description = data.get('description', '').strip()
     status = data.get('status', 'todo')
     priority = data.get('priority', 'medium')
+    category = data.get('category', 'General').strip() or 'General'
     assigned_to = data.get('assigned_to')
     file_id = data.get('file_id')
     due_date = data.get('due_date', '').strip()
@@ -1312,12 +1322,12 @@ def update_task_details(task_id):
 
     query_db("""
         UPDATE tasks 
-        SET title = %s, description = %s, status = %s, priority = %s, 
+        SET title = %s, description = %s, status = %s, priority = %s, category = %s,
             assigned_to = %s, file_id = %s, due_date = %s, updated_at = NOW()
         WHERE id = %s
-    """, (title, description, status, priority, assigned_to_val, file_id_val, due_date_val, task_id), commit=True)
+    """, (title, description, status, priority, category, assigned_to_val, file_id_val, due_date_val, task_id), commit=True)
 
-    log_action(user_id, 'UPDATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}")
+    log_action(user_id, 'UPDATE_TASK', request.remote_addr, f"Task ID: {task_id}, Title: {title[:50]}, Category: {category}")
     return jsonify({'success': True})
 
 
