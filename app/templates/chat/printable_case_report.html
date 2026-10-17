@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Official Case Tracking & Compliance Report - AI Secure Messaging</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+            padding: 36px 48px;
+            color: #1e293b;
+            background: white;
+            line-height: 1.5;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2.5px solid #1A2B4C;
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+        .logo-title h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            color: #1A2B4C;
+            letter-spacing: -0.5px;
+        }
+        .logo-title p {
+            margin: 4px 0 0 0;
+            font-size: 13px;
+            color: #64748b;
+        }
+        .report-meta {
+            text-align: right;
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.6;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            background: #f8fafc;
+        }
+        .kpi-card span {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+        }
+        .kpi-card strong {
+            font-size: 20px;
+            color: #1e293b;
+            font-weight: 800;
+            margin-top: 2px;
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+            font-size: 11.5px;
+        }
+        th, td {
+            padding: 9px 10px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+        th {
+            background-color: #f1f5f9;
+            color: #1A2B4C;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+        }
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .case-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            font-size: 11px;
+            color: #0f172a;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        .badge-urgent { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        .badge-high { background: #ffedd5; color: #ea580c; border: 1px solid #fed7aa; }
+        .badge-medium { background: #dbeafe; color: #2563eb; border: 1px solid #bfdbfe; }
+        .badge-low { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+        .badge-todo { background: #fef3c7; color: #d97706; }
+        .badge-in_progress { background: #dbeafe; color: #2563eb; }
+        .badge-review { background: #ede9fe; color: #7c3aed; }
+        .badge-completed { background: #d1fae5; color: #059669; }
+
+        .sign-off-section {
+            margin-top: 48px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            padding-top: 24px;
+            border-top: 1px dashed #cbd5e1;
+        }
+        .sign-box {
+            font-size: 12px;
+            color: #475569;
+        }
+        .sign-line {
+            margin-top: 44px;
+            border-bottom: 1px solid #94a3b8;
+            width: 80%;
+        }
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 14px;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 10px; }
+            .kpi-card { border: 1px solid #cbd5e1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+        <button onclick="window.print()" style="padding: 10px 22px; background: #1A2B4C; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            🖨️ Print / Save as PDF
+        </button>
+        <button onclick="window.close()" style="padding: 10px 18px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; cursor: pointer;">
+            Close Window
+        </button>
+    </div>
+
+    <div class="header">
+        <div class="logo-title">
+            <h1>AI Secure Messaging & Case Tracking System</h1>
+            <p>Official Workflow Progress & Compliance Management Report</p>
+        </div>
+        <div class="report-meta">
+            <strong style="color:#1A2B4C; font-size:13px;">OFFICIAL COMPLIANCE REPORT</strong><br>
+            Generated On: <strong>{{ generated_at }}</strong><br>
+            Prepared By: <strong>{{ generated_by }}</strong><br>
+            Client / Organization: <strong>Salwa, Fairuz & Co.</strong>
+        </div>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <span>Total Cases</span>
+            <strong>{{ stats.total }}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 3px solid #f59e0b;">
+            <span>To-Do / New</span>
+            <strong style="color:#d97706;">{{ stats.todo }}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 3px solid #3b82f6;">
+            <span>In Progress</span>
+            <strong style="color:#2563eb;">{{ stats.in_progress }}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 3px solid #8b5cf6;">
+            <span>Under Review</span>
+            <strong style="color:#7c3aed;">{{ stats.review }}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 3px solid #10b981;">
+            <span>Completed</span>
+            <strong style="color:#059669;">{{ stats.completed }}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 3px solid #ef4444; background:#fef2f2;">
+            <span>Overdue Cases</span>
+            <strong style="color:#dc2626;">{{ stats.overdue }}</strong>
+        </div>
+    </div>
+
+    <!-- Active Filter Info -->
+    <div style="font-size: 11.5px; color: #64748b; margin-bottom: 12px; display: flex; gap: 16px;">
+        <span><strong>Filter Mode:</strong> {{ filter_info.mode|title }}</span>
+        <span><strong>Priority:</strong> {{ filter_info.priority|title }}</span>
+        <span><strong>Category:</strong> {{ filter_info.category }}</span>
+        {% if filter_info.search %}
+        <span><strong>Search Query:</strong> "{{ filter_info.search }}"</span>
+        {% endif %}
+    </div>
+
+    <!-- Cases Table -->
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 10%;">Case ID</th>
+                <th style="width: 13%;">Category</th>
+                <th style="width: 10%;">Priority</th>
+                <th style="width: 11%;">Status</th>
+                <th>Task / Case Title</th>
+                <th style="width: 14%;">Assigned PIC</th>
+                <th style="width: 14%;">Linked Document</th>
+                <th style="width: 14%;">Due Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tasks %}
+            <tr>
+                <td><span class="case-code">{{ t.case_code }}</span></td>
+                <td><strong>{{ t.category }}</strong></td>
+                <td>
+                    <span class="badge badge-{{ t.priority }}">{{ t.priority }}</span>
+                </td>
+                <td>
+                    <span class="badge badge-{{ t.status }}">{{ t.status|replace('_', ' ') }}</span>
+                </td>
+                <td>
+                    <strong>{{ t.title }}</strong>
+                    {% if t.description %}
+                    <br><small style="color:#64748b;">{{ t.description[:75] }}{% if t.description|length > 75 %}...{% endif %}</small>
+                    {% endif %}
+                </td>
+                <td>{{ t.assignee_fullname or t.assignee_name or 'Unassigned' }}</td>
+                <td>
+                    {% if t.file_name %}
+                    📎 {{ t.file_name[:22] }}
+                    {% else %}
+                    <span style="color:#94a3b8;">None</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if t.is_overdue %}
+                    <strong style="color:#dc2626;">⚠️ {{ t.due_date_str }}</strong>
+                    {% else %}
+                    {{ t.due_date_str }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 30px; color: #94a3b8;">
+                    No cases found matching the specified report criteria.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Sign-off Section -->
+    <div class="sign-off-section">
+        <div class="sign-box">
+            <span>Prepared By (Case Officer / PIC):</span>
+            <div class="sign-line"></div>
+            <p style="margin-top: 6px;">Name: <strong>{{ generated_by }}</strong><br>Date: {{ generated_at.split(',')[0] }}</p>
+        </div>
+        <div class="sign-box">
+            <span>Reviewed & Approved By (Managing Partner / Supervisor):</span>
+            <div class="sign-line"></div>
+            <p style="margin-top: 6px;">Name: _______________________________<br>Date: _______________________________</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        Confidential Document — AI Secure Messaging Platform (Encrypted Enterprise Edition) &bull; Salwa, Fairuz & Co.
+    </div>
+</body>
+</html>

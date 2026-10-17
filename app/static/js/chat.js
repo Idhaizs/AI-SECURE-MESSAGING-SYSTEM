@@ -2222,6 +2222,7 @@ async function loadTasks() {
 
         currentTasksList = data.tasks || [];
         const counts = data.counts || { todo: 0, in_progress: 0, review: 0, completed: 0, total: 0 };
+        const dueSummary = data.due_summary || { overdue_count: 0, due_soon_count: 0, urgent_cases: [] };
 
         // Update Stats
         const statTotal = document.getElementById('statTotalTasks');
@@ -2246,6 +2247,9 @@ async function loadTasks() {
         if (countRevEl) countRevEl.textContent = counts.review;
         if (countCompEl) countCompEl.textContent = counts.completed;
 
+        // Update Urgent Deadline Alert Banner
+        updateUrgentDeadlineBanner(dueSummary);
+
         // Render Kanban & Table
         renderKanbanBoard(currentTasksList);
         renderTasksTable(currentTasksList);
@@ -2253,6 +2257,65 @@ async function loadTasks() {
     } catch (err) {
         console.error('Error fetching tasks:', err);
     }
+}
+
+function updateUrgentDeadlineBanner(dueSummary) {
+    const banner = document.getElementById('taskUrgentBanner');
+    if (!banner) return;
+
+    const totalUrgent = (dueSummary.overdue_count || 0) + (dueSummary.due_soon_count || 0);
+
+    if (totalUrgent > 0 && !window.taskBannerDismissed) {
+        banner.style.display = 'block';
+        const titleEl = document.getElementById('taskUrgentBannerTitle');
+        const descEl = document.getElementById('taskUrgentBannerDesc');
+
+        if (titleEl) {
+            titleEl.innerHTML = `⚠️ Immediate Attention Required: <strong>${totalUrgent} Case${totalUrgent > 1 ? 's' : ''}</strong> with Urgent Deadlines!`;
+        }
+
+        if (descEl) {
+            let details = [];
+            if (dueSummary.overdue_count > 0) {
+                details.push(`<span style="font-weight:700; color:#dc2626;">🚨 ${dueSummary.overdue_count} Overdue</span>`);
+            }
+            if (dueSummary.due_soon_count > 0) {
+                details.push(`<span style="font-weight:700; color:#d97706;">⏰ ${dueSummary.due_soon_count} Due Soon (&lt;48h)</span>`);
+            }
+            if (dueSummary.urgent_cases && dueSummary.urgent_cases.length > 0) {
+                const caseTags = dueSummary.urgent_cases.map(c => `<strong>${c.case_code}</strong>: ${escapeHtml(c.title.substring(0, 24))} (${c.time_urgency_str})`).join(' | ');
+                details.push(caseTags);
+            }
+            descEl.innerHTML = details.join(' &bull; ');
+        }
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function filterUrgentTasks() {
+    const prioritySelect = document.getElementById('taskFilterPriority');
+    if (prioritySelect) {
+        prioritySelect.value = 'urgent';
+        loadTasks();
+        showToast('Filtered by Urgent Priority Cases', 'info');
+    }
+}
+
+function dismissUrgentBanner() {
+    window.taskBannerDismissed = true;
+    const banner = document.getElementById('taskUrgentBanner');
+    if (banner) banner.style.display = 'none';
+}
+
+function exportCasesPdf() {
+    const assigneeFilter = document.getElementById('taskFilterAssignee')?.value || 'all';
+    const priorityFilter = document.getElementById('taskFilterPriority')?.value || 'all';
+    const categoryFilter = document.getElementById('taskFilterCategory')?.value || 'all';
+    const searchQuery = document.getElementById('taskSearchInput')?.value.trim() || '';
+
+    const url = `/chat/tasks/export-pdf?filter=${encodeURIComponent(assigneeFilter)}&priority=${encodeURIComponent(priorityFilter)}&category=${encodeURIComponent(categoryFilter)}&q=${encodeURIComponent(searchQuery)}`;
+    window.open(url, '_blank');
 }
 
 function getPriorityBadgeInfo(priority) {
@@ -2457,7 +2520,8 @@ function createKanbanCardElement(task) {
                 </div>
                 <span style="font-weight:600; color:#334155; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(assigneeText)}</span>
             </div>
-            <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${task.comment_count > 0 ? `<span style="display:inline-flex; align-items:center; gap:3px; font-size:10.5px; color:#475569; background:#f1f5f9; padding:2px 6px; border-radius:6px;" title="${task.comment_count} notes"><i class="far fa-comment-dots" style="color:#2563eb;"></i> ${task.comment_count}</span>` : ''}
                 ${task.due_date_str ? `<span style="${task.is_overdue ? 'color:#dc2626; font-weight:700;' : ''}"><i class="far fa-calendar-alt" style="margin-right:3px;"></i>${task.due_date_str.split(',')[0]}</span>` : '<span style="color:#94a3b8;">No due date</span>'}
             </div>
         </div>
@@ -2727,6 +2791,9 @@ function openTaskDetail(taskId) {
     `;
 
     document.getElementById('taskDetailModal').style.display = 'flex';
+    const commentInput = document.getElementById('newTaskCommentInput');
+    if (commentInput) commentInput.value = '';
+    loadTaskComments(task.id);
 }
 
 function closeTaskDetailModal() {
@@ -2745,6 +2812,113 @@ function deleteCurrentTaskFromDetail() {
     if (!tid) return;
     deleteTask(tid);
     closeTaskDetailModal();
+}
+
+// ─── Task Comments / Internal Progress Notes Logic ───────────────
+
+async function loadTaskComments(taskId) {
+    const container = document.getElementById('detailCommentsContainer');
+    const badge = document.getElementById('detailCommentCountBadge');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/chat/tasks/${taskId}/comments`);
+        const data = await res.json();
+
+        if (!data.success) {
+            container.innerHTML = `<div style="text-align:center; padding:10px; color:#ef4444; font-size:11.5px;">Failed to load notes</div>`;
+            return;
+        }
+
+        const comments = data.comments || [];
+        if (badge) badge.textContent = comments.length;
+
+        const task = currentTasksList.find(t => t.id === taskId);
+        if (task) task.comment_count = comments.length;
+
+        if (comments.length === 0) {
+            container.innerHTML = `<div style="text-align:center; padding:12px; color:#94a3b8; font-size:11.5px;"><i class="far fa-comments" style="margin-right:4px;"></i> No progress notes yet. Be the first to add an update!</div>`;
+            return;
+        }
+
+        container.innerHTML = comments.map(c => {
+            const author = c.full_name || c.username || 'User';
+            const initial = author[0].toUpperCase();
+            return `
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px; font-size:12px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <div style="width:18px; height:18px; border-radius:50%; background:#1a2b4c; color:white; font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center;">${initial}</div>
+                            <strong style="color:#1e293b; font-size:11.5px;">${escapeHtml(author)}</strong>
+                            <span style="font-size:10px; color:#94a3b8;">${c.created_at_str}</span>
+                        </div>
+                        ${c.is_author ? `<button onclick="deleteTaskComment(${c.id})" title="Delete Note" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:11px; padding:2px;"><i class="fas fa-trash-alt"></i></button>` : ''}
+                    </div>
+                    <div style="color:#334155; line-height:1.4; word-break:break-word; margin-left:24px;">${escapeHtml(c.comment)}</div>
+                </div>
+            `;
+        }).join('');
+
+        container.scrollTop = container.scrollHeight;
+    } catch (err) {
+        container.innerHTML = `<div style="text-align:center; padding:10px; color:#ef4444; font-size:11.5px;">Error loading notes</div>`;
+    }
+}
+
+async function submitTaskComment() {
+    if (!currentTaskDetailId) return;
+    const input = document.getElementById('newTaskCommentInput');
+    const comment = input ? input.value.trim() : '';
+
+    if (!comment) return;
+
+    const btn = document.getElementById('submitCommentBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch(`/chat/tasks/${currentTaskDetailId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ comment })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (input) input.value = '';
+            await loadTaskComments(currentTaskDetailId);
+            loadTasks();
+            showToast('Progress note added', 'success');
+        } else {
+            alert('Failed to add note: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error adding note: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function deleteTaskComment(commentId) {
+    if (!confirm('Are you sure you want to delete this progress note?')) return;
+
+    try {
+        const res = await fetch(`/chat/tasks/comments/${commentId}/delete`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (currentTaskDetailId) {
+                await loadTaskComments(currentTaskDetailId);
+                loadTasks();
+            }
+            showToast('Note deleted', 'info');
+        } else {
+            alert('Failed to delete note: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error deleting note: ' + err.message);
+    }
 }
 
 async function quickUpdateTaskStatus(taskId, newStatus, event) {

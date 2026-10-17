@@ -79,6 +79,19 @@ def auto_migrate_database():
             if 'category' not in task_cols:
                 cursor.execute("ALTER TABLE `tasks` ADD COLUMN `category` VARCHAR(50) DEFAULT 'General' AFTER `priority`")
                 cursor.execute("ALTER TABLE `tasks` ADD INDEX (`category`)")
+
+            # Ensure task_comments table exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `task_comments` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `task_id` INT NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `comment` TEXT NOT NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX (`task_id`),
+                    INDEX (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
             conn.commit()
     except Exception as e:
         print(f"Auto-migration note: {e}")

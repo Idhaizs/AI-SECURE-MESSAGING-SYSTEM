@@ -1146,7 +1146,8 @@ def get_tasks():
         SELECT t.*, 
                u_assignee.username as assignee_name, u_assignee.full_name as assignee_fullname,
                u_creator.username as creator_name, u_creator.full_name as creator_fullname,
-               f.file_name, f.file_id, f.file_path, f.scan_result, f.is_password_protected
+               f.file_name, f.file_id, f.file_path, f.scan_result, f.is_password_protected,
+               (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) as comment_count
         FROM tasks t
         LEFT JOIN users u_assignee ON t.assigned_to = u_assignee.user_id
         LEFT JOIN users u_creator ON t.created_by = u_creator.user_id
@@ -1194,6 +1195,7 @@ def get_tasks():
     counts = {'todo': 0, 'in_progress': 0, 'review': 0, 'completed': 0, 'total': 0}
 
     from datetime import datetime, timedelta
+    now_dt = datetime.now()
 
     for t in (tasks or []):
         t_dict = dict(t)
@@ -1204,16 +1206,35 @@ def get_tasks():
 
         t_dict['case_code'] = f"CASE-{t_dict['id']:04d}"
         t_dict['category'] = t_dict.get('category') or 'General'
+        t_dict['comment_count'] = int(t_dict.get('comment_count') or 0)
 
         due_val = t_dict.get('due_date')
         if due_val and hasattr(due_val, 'strftime'):
             t_dict['due_date_str'] = (due_val + timedelta(hours=8)).strftime('%d %b %Y, %I:%M %p')
             t_dict['due_date_iso'] = due_val.strftime('%Y-%m-%dT%H:%M')
-            t_dict['is_overdue'] = bool(datetime.now() > due_val and st != 'completed')
+            t_dict['is_overdue'] = bool(now_dt > due_val and st != 'completed')
+            t_dict['is_due_soon'] = bool(now_dt <= due_val <= now_dt + timedelta(hours=48) and st != 'completed')
+
+            if st != 'completed':
+                diff = due_val - now_dt
+                total_seconds = int(diff.total_seconds())
+                if total_seconds < 0:
+                    abs_sec = abs(total_seconds)
+                    hours = abs_sec // 3600
+                    days = hours // 24
+                    t_dict['time_urgency_str'] = f"Overdue by {days}d {hours%24}h" if days > 0 else f"Overdue by {hours}h"
+                else:
+                    hours = total_seconds // 3600
+                    days = hours // 24
+                    t_dict['time_urgency_str'] = f"Due in {days}d {hours%24}h" if days > 0 else f"Due in {hours}h"
+            else:
+                t_dict['time_urgency_str'] = 'Completed'
         else:
             t_dict['due_date_str'] = None
             t_dict['due_date_iso'] = ''
             t_dict['is_overdue'] = False
+            t_dict['is_due_soon'] = False
+            t_dict['time_urgency_str'] = '-'
 
         created_val = t_dict.get('created_at')
         if created_val and hasattr(created_val, 'strftime'):
@@ -1226,10 +1247,17 @@ def get_tasks():
 
         formatted_tasks.append(t_dict)
 
+    due_summary = {
+        'overdue_count': sum(1 for x in formatted_tasks if x.get('is_overdue')),
+        'due_soon_count': sum(1 for x in formatted_tasks if x.get('is_due_soon')),
+        'urgent_cases': [x for x in formatted_tasks if (x.get('is_overdue') or x.get('is_due_soon'))][:6]
+    }
+
     return jsonify({
         'success': True,
         'tasks': formatted_tasks,
         'counts': counts,
+        'due_summary': due_summary,
         'current_user_id': user_id
     })
 
@@ -1381,4 +1409,187 @@ def get_task_members():
         ORDER BY username ASC
     """)
     return jsonify({'success': True, 'members': list(members or [])})
+
+
+# ─── Task Comments / Progress Notes Endpoints ──────────────────────
+
+@chat_bp.route('/chat/tasks/<int:task_id>/comments', methods=['GET'])
+@login_required
+def get_task_comments(task_id):
+    comments = query_db("""
+        SELECT tc.*, u.username, u.full_name, u.role
+        FROM task_comments tc
+        LEFT JOIN users u ON tc.user_id = u.user_id
+        WHERE tc.task_id = %s
+        ORDER BY tc.created_at ASC
+    """, (task_id,))
+
+    from datetime import datetime, timedelta
+    res = []
+    user_id = session.get('user_id')
+    for c in (comments or []):
+        cd = dict(c)
+        cat = cd.get('created_at')
+        if cat and hasattr(cat, 'strftime'):
+            cd['created_at_str'] = (cat + timedelta(hours=8)).strftime('%d %b %Y, %I:%M %p')
+        else:
+            cd['created_at_str'] = '-'
+        cd['is_author'] = (int(cd['user_id']) == int(user_id))
+        res.append(cd)
+
+    return jsonify({'success': True, 'comments': res})
+
+
+@chat_bp.route('/chat/tasks/<int:task_id>/comments', methods=['POST'])
+@login_required
+def add_task_comment(task_id):
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    comment_text = data.get('comment', '').strip()
+
+    if not comment_text:
+        return jsonify({'success': False, 'error': 'Comment cannot be empty'}), 400
+
+    task = query_db("SELECT id, title FROM tasks WHERE id = %s", (task_id,), one=True)
+    if not task:
+        return jsonify({'success': False, 'error': 'Task not found'}), 404
+
+    comment_id = query_db("""
+        INSERT INTO task_comments (task_id, user_id, comment, created_at)
+        VALUES (%s, %s, %s, NOW())
+    """, (task_id, user_id, comment_text), commit=True)
+
+    log_action(user_id, 'ADD_TASK_COMMENT', request.remote_addr, f"Task #{task_id}: {comment_text[:60]}")
+    return jsonify({'success': True, 'comment_id': comment_id})
+
+
+@chat_bp.route('/chat/tasks/comments/<int:comment_id>/delete', methods=['POST'])
+@login_required
+def delete_task_comment(comment_id):
+    user_id = session['user_id']
+    comment = query_db("SELECT * FROM task_comments WHERE id = %s", (comment_id,), one=True)
+    if not comment:
+        return jsonify({'success': False, 'error': 'Comment not found'}), 404
+
+    user = query_db("SELECT role FROM users WHERE user_id = %s", (user_id,), one=True)
+    is_admin = bool(user and user.get('role') == 'admin')
+
+    if int(comment['user_id']) != int(user_id) and not is_admin:
+        return jsonify({'success': False, 'error': 'Permission denied'}), 403
+
+    query_db("DELETE FROM task_comments WHERE id = %s", (comment_id,), commit=True)
+    log_action(user_id, 'DELETE_TASK_COMMENT', request.remote_addr, f"Deleted comment ID: {comment_id} on Task #{comment['task_id']}")
+    return jsonify({'success': True})
+
+
+# ─── Printable PDF Case Tracking Report ───────────────────────────
+
+@chat_bp.route('/chat/tasks/export-pdf', methods=['GET'])
+@login_required
+def export_cases_pdf():
+    user_id = session['user_id']
+    filter_mode = request.args.get('filter', 'all')
+    priority_filter = request.args.get('priority', 'all')
+    category_filter = request.args.get('category', 'all')
+    search_q = request.args.get('q', '').strip()
+
+    sql = """
+        SELECT t.*, 
+               u_assignee.username as assignee_name, u_assignee.full_name as assignee_fullname,
+               u_creator.username as creator_name, u_creator.full_name as creator_fullname,
+               f.file_name, f.file_id
+        FROM tasks t
+        LEFT JOIN users u_assignee ON t.assigned_to = u_assignee.user_id
+        LEFT JOIN users u_creator ON t.created_by = u_creator.user_id
+        LEFT JOIN files f ON t.file_id = f.file_id
+        WHERE 1=1
+    """
+    params = []
+
+    if filter_mode == 'assigned_me':
+        sql += " AND t.assigned_to = %s"
+        params.append(user_id)
+    elif filter_mode == 'created_me':
+        sql += " AND t.created_by = %s"
+        params.append(user_id)
+
+    if priority_filter and priority_filter != 'all':
+        sql += " AND t.priority = %s"
+        params.append(priority_filter)
+
+    if category_filter and category_filter != 'all':
+        sql += " AND t.category = %s"
+        params.append(category_filter)
+
+    if search_q:
+        sql += " AND (t.title LIKE %s OR t.description LIKE %s OR t.category LIKE %s OR f.file_name LIKE %s)"
+        like_term = f"%{search_q}%"
+        params.extend([like_term, like_term, like_term, like_term])
+
+    sql += """
+        ORDER BY 
+            CASE t.priority
+                WHEN 'urgent' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 5
+            END,
+            t.due_date ASC,
+            t.id DESC
+    """
+
+    tasks = query_db(sql, tuple(params))
+    
+    from datetime import datetime, timedelta
+    now_dt = datetime.now()
+    formatted_tasks = []
+    stats = {'total': 0, 'todo': 0, 'in_progress': 0, 'review': 0, 'completed': 0, 'overdue': 0}
+
+    for t in (tasks or []):
+        td = dict(t)
+        st = td.get('status') or 'todo'
+        if st in stats:
+            stats[st] += 1
+        stats['total'] += 1
+
+        td['case_code'] = f"CASE-{td['id']:04d}"
+        td['category'] = td.get('category') or 'General'
+
+        due_val = td.get('due_date')
+        if due_val and hasattr(due_val, 'strftime'):
+            td['due_date_str'] = (due_val + timedelta(hours=8)).strftime('%d %b %Y, %I:%M %p')
+            td['is_overdue'] = bool(now_dt > due_val and st != 'completed')
+            if td['is_overdue']:
+                stats['overdue'] += 1
+        else:
+            td['due_date_str'] = '-'
+            td['is_overdue'] = False
+
+        created_val = td.get('created_at')
+        if created_val and hasattr(created_val, 'strftime'):
+            td['created_at_str'] = (created_val + timedelta(hours=8)).strftime('%d %b %Y')
+        else:
+            td['created_at_str'] = '-'
+
+        formatted_tasks.append(td)
+
+    gen_time = (now_dt + timedelta(hours=8)).strftime('%d %B %Y, %I:%M %p')
+    user = query_db("SELECT username, full_name FROM users WHERE user_id = %s", (user_id,), one=True)
+    generated_by = (user.get('full_name') if user and user.get('full_name') else session.get('username', 'System User'))
+
+    log_action(user_id, 'EXPORT_CASES_PDF', request.remote_addr, f"Exported {len(formatted_tasks)} cases to PDF report")
+
+    return render_template('chat/printable_case_report.html',
+                           tasks=formatted_tasks,
+                           stats=stats,
+                           generated_at=gen_time,
+                           generated_by=generated_by,
+                           filter_info={
+                               'mode': filter_mode,
+                               'priority': priority_filter,
+                               'category': category_filter,
+                               'search': search_q
+                           })
+
 
